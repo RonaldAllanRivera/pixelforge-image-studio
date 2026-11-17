@@ -99,7 +99,12 @@ final class SubmitGeneration implements ShouldQueue
             return;
         }
 
-        $apply->handle($generation, $snapshot);
+        $generation = $apply->handle($generation, $snapshot);
+
+        // Webhooks should bring the result; polling catches it if they don't.
+        if (! $generation->status->isFinal()) {
+            PollGeneration::dispatch($generation)->delay(PollGeneration::waitBefore(1));
+        }
     }
 
     /**

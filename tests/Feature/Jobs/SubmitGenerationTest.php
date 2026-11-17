@@ -10,9 +10,12 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Tests\Fixtures\Pixelforge;
 
 beforeEach(function () {
+    // These tests run the job directly. Faking the queue keeps the follow-up poll from running too.
+    Queue::fake();
     $this->generation = Generation::factory()->create([
         'prompt' => 'A lighthouse at dusk',
         'size' => ImageSize::Landscape,

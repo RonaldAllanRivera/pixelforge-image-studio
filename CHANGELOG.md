@@ -2,6 +2,14 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Phase 6: Polling and the hourly catch-up (2026-11-17)
+
+### Added
+
+- `PollGeneration` job: after a successful submit, asks Pixelforge how the generation is doing after 20 seconds, then 30, 45 and every 60 seconds until it finishes, for up to 15 minutes. Results go through the same `ApplyGenerationSnapshot` as webhooks, so a poll and a webhook reporting the same success charge once. Polls share the 50-per-minute Pixelforge limiter and wait out its rate limits.
+- `generations:reconcile`, scheduled hourly: polls accepted generations with no news for 2 minutes, and resubmits never-accepted ones with their original `Idempotency-Key`, which can't create a second generation. Hourly rather than every minute keeps the app inside Laravel Cloud's free usage credit, because each scheduled run wakes the app and database.
+- Seen live: a generation whose first webhooks were refused (the CSRF bug fixed in Phase 5) was recorded correctly when Pixelforge retried them 10 minutes later. It was charged once.
+
 ## Phase 5: Webhooks (2026-11-17)
 
 ### Added

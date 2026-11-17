@@ -66,6 +66,10 @@ If a first attempt timed out, Pixelforge may have created the generation. A late
 
 The endpoint verifies the signature on the raw body, then inserts the event (unique by event id, `ON CONFLICT DO NOTHING`) and applies it in one transaction. A duplicate is detected by the insert and answered `204`. If applying fails, the insert rolls back too and the answer is `500`, so Pixelforge's retry gets a clean second try. An event can never be marked as seen without being applied. The work is one short locked transaction, far under Pixelforge's 10-second limit, so it doesn't need a queue. Without one, status updates the moment the webhook lands, even while the queue worker is asleep. Not chosen: storing the event and applying it in a queued job, which needs extra handling for "stored but never applied".
 
+## Polling is the safety net, webhooks are the fast path
+
+Webhooks aren't guaranteed, so every accepted generation is also polled: after 20, 30 and 45 seconds, then every minute, for 15 minutes. Polls only run while something is in flight. An hourly `generations:reconcile` command catches anything older: it polls accepted generations that have been quiet for 2 minutes and resubmits pending ones with their original `Idempotency-Key`. It runs hourly, not every minute, because on Laravel Cloud each scheduled run wakes the sleeping app and database. A per-minute schedule would keep both awake around the clock, outside the free usage credit. Not chosen: a per-minute reconcile as the only safety net, which costs money and still reacts more slowly than per-generation polls.
+
 ## Sign-up and login only
 
 The starter kit's email verification, two-factor login and passkeys were left out. They don't serve this app, and email verification would lock out anyone testing a deployment without a mail service.
