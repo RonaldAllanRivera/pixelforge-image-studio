@@ -1,15 +1,16 @@
 # Pixelforge Image Studio
 
 <!-- Remove the status line below once Phase 10 is done. -->
-> **Status: work in progress.** This README describes the design. Sections marked *(pending)* are filled in as each part ships.
+
+> **Status: work in progress.** This README describes the design. Sections marked _(pending)_ are filled in as each part ships.
 
 A Laravel, Vue and Inertia app where signed-in users generate images through the Pixelforge API and pay exactly what each generation cost, plus a 25% markup. Built for the PromptEdit Senior Product Engineer take-home assessment.
 
 ## Live app
 
-*(pending)*
+_(pending)_
 
-- URL: *(pending)*
+- URL: _(pending)_
 - Logins: anyone can sign up as a normal user. A demo admin account for the usage report is listed here once deployed. The admin role can only read reports.
 
 ## What it does
@@ -17,8 +18,8 @@ A Laravel, Vue and Inertia app where signed-in users generate images through the
 - **Generate:** write a prompt, pick a size and quality, and add up to 4 reference image URLs. The price updates as you type: an estimate, and the most it can cost.
 - **History:** every generation with its live status (queued, generating, succeeded or failed), the estimated and the actual cost, and the image.
 - **Pay exactly once:** the actual cost is recorded when a generation finishes. Failed generations are free. A duplicate or late webhook can never charge twice.
-- **Admin report** *(stretch goal, pending)*: charges, provider costs and profit per day and per user, checked against Pixelforge's `GET /v1/usage`.
-- **Credit balances** *(stretch goal, pending)*: a fake "Buy credits" button, and generating is blocked when you can't afford the maximum price.
+- **Admin report** _(stretch goal, pending)_: charges, provider costs and profit per day and per user, checked against Pixelforge's `GET /v1/usage`.
+- **Credit balances** _(stretch goal, pending)_: a fake "Buy credits" button, and generating is blocked when you can't afford the maximum price.
 
 ## Stack
 
@@ -34,11 +35,11 @@ Laravel, Vue 3, Inertia, TypeScript, Tailwind, PostgreSQL and Pest. Deployed on 
 
 **Three numbers per generation:**
 
-| | How it's worked out | Shown as |
-|---|---|---|
-| Estimate | Text tokens `ceil(characters ÷ 4)`, exact image and output tokens, reasoning at the middle of its range | "Estimated" |
-| Maximum | Text tokens + 15%, reasoning at the top of its range | "Up to" |
-| Actual | Pixelforge's reported token usage × the generation's rates | The final charge |
+|          | How it's worked out                                                                                     | Shown as         |
+| -------- | ------------------------------------------------------------------------------------------------------- | ---------------- |
+| Estimate | Text tokens `ceil(characters ÷ 4)`, exact image and output tokens, reasoning at the middle of its range | "Estimated"      |
+| Maximum  | Text tokens + 15%, reasoning at the top of its range                                                    | "Up to"          |
+| Actual   | Pixelforge's reported token usage × the generation's rates                                              | The final charge |
 
 Characters are counted as Unicode code points on the server (`mb_strlen`), the way Pixelforge counts them. JavaScript's `string.length` miscounts emoji.
 
@@ -48,15 +49,15 @@ Characters are counted as Unicode code points on the server (`mb_strlen`), the w
 
 ## How failures are handled
 
-| Pixelforge does this | The app does this | The user sees |
-|---|---|---|
-| `503 overloaded` | Retries with the same `Idempotency-Key`, backing off, then gives up | "Pixelforge is busy. You weren't charged." |
-| `429` concurrency limit | Waits for a free slot (3 generations at a time per account) | "Waiting for a free slot" |
-| `429` rate limit | Waits for `Retry-After`. All calls are throttled below the limit. | Queued |
-| `429` daily limit | Marks it failed, free | "Daily limit reached, try again tomorrow (UTC)." |
-| `400` content policy | Marks it failed, free | "This prompt was rejected by the content policy. You weren't charged." |
-| No response or a timeout | Keeps it pending and retries with the same key. Never marks it failed, because Pixelforge may have created it. | Queued |
-| Generation fails after it was accepted | Marks it failed, cost 0 | The reason, plus a "Try again" button |
+| Pixelforge does this                   | The app does this                                                                                              | The user sees                                                          |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `503 overloaded`                       | Retries with the same `Idempotency-Key`, backing off, then gives up                                            | "Pixelforge is busy. You weren't charged."                             |
+| `429` concurrency limit                | Waits for a free slot (3 generations at a time per account)                                                    | "Waiting for a free slot"                                              |
+| `429` rate limit                       | Waits for `Retry-After`. All calls are throttled below the limit.                                              | Queued                                                                 |
+| `429` daily limit                      | Marks it failed, free                                                                                          | "Daily limit reached, try again tomorrow (UTC)."                       |
+| `400` content policy                   | Marks it failed, free                                                                                          | "This prompt was rejected by the content policy. You weren't charged." |
+| No response or a timeout               | Keeps it pending and retries with the same key. Never marks it failed, because Pixelforge may have created it. | Queued                                                                 |
+| Generation fails after it was accepted | Marks it failed, cost 0                                                                                        | The reason, plus a "Try again" button                                  |
 
 ## Webhooks
 
@@ -69,18 +70,14 @@ Characters are counted as Unicode code points on the server (`mb_strlen`), the w
 
 ## Running locally
 
-*(pending, finished in the last phase)*
-
-You need PHP 8.3+, Composer, Node, PostgreSQL, and a Pixelforge API key **for local use only**. Each key has its own webhook URL, secret and usage report.
+You need PHP 8.3+ (with `pdo_pgsql`), Composer, Node 22+, Docker, and a Pixelforge API key **for local use only**. Each key has its own webhook URL, secret and usage report.
 
 ```bash
-composer install
-npm install
-cp .env.example .env
-php artisan key:generate
-# Set DB_* and PIXELFORGE_API_KEY, PIXELFORGE_WEBHOOK_SECRET in .env
-php artisan migrate --seed
-composer run dev
+cp .env.example .env          # then set PIXELFORGE_API_KEY and PIXELFORGE_WEBHOOK_SECRET
+docker compose up -d          # Postgres, with a separate pixelforge_testing database for tests
+composer setup                # installs dependencies, generates the app key, migrates, builds assets
+php artisan db:seed           # test@example.com and admin@example.com, both with password "password"
+composer run dev              # app on http://localhost:8000, plus the queue worker and Vite
 ```
 
 Pixelforge can't reach `localhost`, so open a tunnel and paste its URL into the Pixelforge dashboard as the webhook URL (`https://<tunnel>/webhooks/pixelforge`):
@@ -92,15 +89,18 @@ cloudflared tunnel --url http://localhost:8000
 ## Tests
 
 ```bash
-php artisan test
+php artisan test       # Pest, against the pixelforge_testing Postgres database
+composer ci:check      # everything CI runs: formatting, types, Pint, PHPStan and the tests
 ```
+
+Tests never call Pixelforge: `phpunit.xml` replaces the real key and webhook secret with fake ones.
 
 Prompt keywords force Pixelforge's behaviour, so every path can be tried by hand: `[fail]`, `[slow]`, `[duplicate]`, `[blocked]`, `[overloaded]` and `[succeed]`.
 
 ## Decisions
 
-The choices the brief left open, and why, are in [docs/DECISIONS.md](docs/DECISIONS.md) *(pending)*.
+The choices the brief left open, and why, are in [docs/DECISIONS.md](docs/DECISIONS.md) _(pending)_.
 
 ## Known limits and next steps
 
-*(pending)*
+_(pending)_

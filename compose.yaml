@@ -1,0 +1,30 @@
+# Local Postgres for development and tests: `docker compose up -d`.
+# Reads DB_DATABASE, DB_USERNAME and DB_PASSWORD from .env.
+services:
+    pgsql:
+        image: postgres:18-alpine
+        ports:
+            - '${DB_PORT:-5432}:5432'
+        environment:
+            POSTGRES_DB: '${DB_DATABASE}'
+            POSTGRES_USER: '${DB_USERNAME}'
+            POSTGRES_PASSWORD: '${DB_PASSWORD}'
+        volumes:
+            - pgsql-data:/var/lib/postgresql
+            - ./docker/pgsql/create-testing-database.sql:/docker-entrypoint-initdb.d/10-create-testing-database.sql:ro
+        healthcheck:
+            test:
+                [
+                    'CMD',
+                    'pg_isready',
+                    '-q',
+                    '-d',
+                    '${DB_DATABASE}',
+                    '-U',
+                    '${DB_USERNAME}',
+                ]
+            interval: 5s
+            retries: 10
+
+volumes:
+    pgsql-data:
