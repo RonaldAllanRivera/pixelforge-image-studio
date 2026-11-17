@@ -2,7 +2,11 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Deployment fixes (2026-11-17)
+## Deployment (2026-11-17)
+
+### Added
+
+- `aws/aws-sdk-php`, which Laravel Cloud's managed queue needs: it runs on Amazon SQS. Jobs run there because queued jobs don't wake an app that has scaled to zero. See `docs/DECISIONS.md`.
 
 ### Fixed
 
