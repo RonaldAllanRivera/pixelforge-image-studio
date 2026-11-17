@@ -2,6 +2,19 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Phase 5: Webhooks (2026-11-17)
+
+### Added
+
+- `POST /webhooks/pixelforge`: verifies the `Pixelforge-Signature` header against the raw body (HMAC-SHA256 with this environment's secret, compared in constant time, timestamps older than 5 minutes refused, any of several `v1` values accepted for secret rotation), then stores and applies the event in one transaction.
+- `webhook_events`: every delivered event, unique by Pixelforge's event id. A duplicate delivery is answered `204` and changes nothing. If applying fails, the stored event rolls back and the endpoint answers `500`, so Pixelforge's retry is processed normally.
+- A webhook that arrives before the create response finds its generation by the id we sent in `metadata`, but only from this environment.
+- Verified live with the local key: a `[duplicate] [succeed]` generation sent 4 webhook requests. 2 events were stored and the cost was recorded once ($0.013635000, charged $0.017043750).
+
+### Fixed
+
+- The webhook route skips CSRF protection. Laravel 13's web group uses `PreventRequestForgery`; excluding the old `ValidateCsrfToken` name had no effect, so real webhooks got `419`. Tests miss this, because Laravel turns CSRF off while testing, so a test now checks the middleware the route really runs.
+
 ## Phase 4: Submitting generations (2026-11-17)
 
 ### Added

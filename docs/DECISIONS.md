@@ -62,6 +62,10 @@ The submit job reads what to do from the error family. _Retry later_: release th
 
 If a first attempt timed out, Pixelforge may have created the generation. A later retry carries the same `Idempotency-Key`, and Pixelforge answers a known key with the existing generation (`Idempotent-Replayed: true`). Its docs say a replay doesn't count against the concurrency or daily limits, which implies the key is checked before those limits apply. So a retry that comes back _rejected_ means that key has no generation behind it, and failing locally can't lose a billed generation. The one case this assumption doesn't cover is an `overloaded` answer sent before the key is checked. The cost would be a single generation Pixelforge bills but the user isn't charged for, which the admin report would show as a mismatch.
 
+## Webhooks are applied inline, in the same transaction that stores them
+
+The endpoint verifies the signature on the raw body, then inserts the event (unique by event id, `ON CONFLICT DO NOTHING`) and applies it in one transaction. A duplicate is detected by the insert and answered `204`. If applying fails, the insert rolls back too and the answer is `500`, so Pixelforge's retry gets a clean second try. An event can never be marked as seen without being applied. The work is one short locked transaction, far under Pixelforge's 10-second limit, so it doesn't need a queue. Without one, status updates the moment the webhook lands, even while the queue worker is asleep. Not chosen: storing the event and applying it in a queued job, which needs extra handling for "stored but never applied".
+
 ## Sign-up and login only
 
 The starter kit's email verification, two-factor login and passkeys were left out. They don't serve this app, and email verification would lock out anyone testing a deployment without a mail service.
