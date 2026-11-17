@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * "charge" is what the user pays. Status and money only change in ApplyGenerationSnapshot.
  *
  * @property int $id
- * @property int $user_id
+ * @property int|null $user_id Null once the user deleted their account; the record stays for billing.
  * @property string|null $provider_id
  * @property string $idempotency_key
  * @property GenerationStatus $status
@@ -43,6 +43,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $error_code
  * @property string|null $error_message
  * @property int $submit_attempts
+ * @property int $overloaded_attempts
  * @property CarbonImmutable|null $started_at
  * @property CarbonImmutable|null $completed_at
  * @property CarbonImmutable|null $last_synced_at
@@ -83,6 +84,7 @@ class Generation extends Model
             'provider_cost_nano' => 'integer',
             'charge_nano' => 'integer',
             'submit_attempts' => 'integer',
+            'overloaded_attempts' => 'integer',
             'image_url_expires_at' => 'immutable_datetime',
             'started_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',

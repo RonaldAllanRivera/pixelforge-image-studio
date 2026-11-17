@@ -40,6 +40,17 @@ final class SubmitGeneration implements ShouldQueue
     /** After this many "overloaded" answers we stop and fail the generation, at no cost. */
     private const MAX_ATTEMPTS_WHEN_OVERLOADED = 5;
 
+    /** A running generation with no news for this long doesn't count toward the 3 slots. */
+    private const SLOT_COUNTS_FOR_MINUTES = 10;
+
+    /**
+     * Seconds to wait after an unexpected exception, so a failing job never retries in a
+     * tight loop that uses up the shared Pixelforge rate limit.
+     *
+     * @var list<int>
+     */
+    public array $backoff = [10, 30, 60];
+
     public function __construct(
         public Generation $generation,
     ) {}
@@ -65,7 +76,15 @@ final class SubmitGeneration implements ShouldQueue
     {
         $generation = $this->generation->fresh();
 
-        if ($generation === null || $generation->status !== GenerationStatus::Pending) {
+        if ($generation === null || $generation->status->isFinal()) {
+            return;
+        }
+
+        if ($generation->status !== GenerationStatus::Pending) {
+            // An earlier attempt timed out, but Pixelforge did create it and a webhook moved it on.
+            // Make sure it's polled, in case the rest of its webhooks go missing.
+            PollGeneration::dispatch($generation)->delay(PollGeneration::waitBefore(1));
+
             return;
         }
 
@@ -81,6 +100,15 @@ final class SubmitGeneration implements ShouldQueue
             $snapshot = $client->createGeneration($this->request($generation), $generation->idempotency_key);
         } catch (RetryLater $e) {
             $this->retryLater($generation, $e, $apply);
+
+            return;
+        } catch (IdempotencyKeyReused $e) {
+            // Proof that a generation already exists under this key. Failing it for free would
+            // let Pixelforge bill us for it while the user pays nothing. Leave it for a person.
+            Log::error('Pixelforge says this generation\'s key was used with different parameters; left pending.', [
+                'generation' => $generation->id,
+                'message' => $e->getMessage(),
+            ]);
 
             return;
         } catch (Rejected $e) {
@@ -125,18 +153,29 @@ final class SubmitGeneration implements ShouldQueue
             $this->waitFor($generation, WaitingReason::FreeSlot, $e->retryAfter);
         } elseif ($e instanceof PixelforgeRateLimited) {
             $this->waitFor($generation, WaitingReason::RateLimit, $e->retryAfter);
-        } elseif ($e instanceof Overloaded && $generation->submit_attempts >= self::MAX_ATTEMPTS_WHEN_OVERLOADED) {
-            $apply->failBeforeAccepted($generation, 'overloaded', $e->getMessage());
+        } elseif ($e instanceof Overloaded) {
+            $generation->increment('overloaded_attempts');
+
+            if ($generation->overloaded_attempts >= self::MAX_ATTEMPTS_WHEN_OVERLOADED) {
+                $apply->failBeforeAccepted($generation, 'overloaded', $e->getMessage());
+            } else {
+                // Wait 2, 4, 8, then 16 seconds, or longer if Pixelforge asks.
+                $this->waitFor($generation, WaitingReason::Overloaded, max($e->retryAfter, 2 ** $generation->overloaded_attempts));
+            }
         } else {
-            // Overloaded: wait 2, 4, 8, then 16 seconds, or longer if Pixelforge asks.
-            $this->waitFor($generation, WaitingReason::Overloaded, max($e->retryAfter, 2 ** $generation->submit_attempts));
+            // A limit we don't know yet: wait as long as Pixelforge asks.
+            $this->waitFor($generation, WaitingReason::RateLimit, $e->retryAfter);
         }
     }
 
+    /**
+     * Touching the row keeps updated_at fresh while the job waits, so the reconcile command
+     * can tell this generation still has a live job and won't start a second one.
+     */
     private function waitFor(Generation $generation, WaitingReason $reason, int $seconds): void
     {
         $generation->waiting_reason = $reason;
-        $generation->save();
+        $generation->touch();
 
         $this->release($seconds);
     }
@@ -146,7 +185,7 @@ final class SubmitGeneration implements ShouldQueue
      */
     private function reportIfOurMistake(Generation $generation, Rejected $e): void
     {
-        if ($e instanceof ValidationFailed || $e instanceof InvalidApiKey || $e instanceof IdempotencyKeyReused) {
+        if ($e instanceof ValidationFailed || $e instanceof InvalidApiKey) {
             Log::error('Pixelforge rejected a generation because of our own mistake.', [
                 'generation' => $generation->id,
                 'code' => $e->errorCode,
@@ -155,10 +194,16 @@ final class SubmitGeneration implements ShouldQueue
         }
     }
 
+    /**
+     * Our generations Pixelforge is working on now. A row with no news for 10 minutes is
+     * stale (its webhooks went missing), not running: even a [slow] one finishes in 90 s.
+     * Pixelforge's own concurrency limit still protects the account if this count is off.
+     */
     private function runningAtPixelforge(): int
     {
         return Generation::query()
             ->whereIn('status', [GenerationStatus::Queued, GenerationStatus::Processing])
+            ->where('updated_at', '>=', now()->subMinutes(self::SLOT_COUNTS_FOR_MINUTES))
             ->count();
     }
 
@@ -175,7 +220,8 @@ final class SubmitGeneration implements ShouldQueue
             referenceImages: $generation->reference_images,
             metadata: [
                 // Lets a webhook find this generation even before the create response arrives.
-                'local_id' => (string) $generation->id,
+                // The UUID can never be reused, unlike an id after a database reset.
+                'local_id' => $generation->idempotency_key,
                 'env' => (string) app()->environment(),
             ],
         );

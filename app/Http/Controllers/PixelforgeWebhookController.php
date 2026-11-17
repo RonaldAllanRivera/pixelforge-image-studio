@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Receives Pixelforge's webhooks.
@@ -86,8 +87,9 @@ final class PixelforgeWebhookController extends Controller
     }
 
     /**
-     * By Pixelforge's id, or, when the webhook beat the create response, by the id we sent
-     * in metadata (only if it came from this environment).
+     * By Pixelforge's id, or, when the webhook beat the create response, by the UUID we sent
+     * as metadata.local_id (only if it came from this environment). A UUID is never reused,
+     * so an old event can't land on a new generation, even after a database reset.
      */
     private function findGeneration(GenerationSnapshot $snapshot): ?Generation
     {
@@ -100,10 +102,10 @@ final class PixelforgeWebhookController extends Controller
         $localId = $snapshot->metadata['local_id'] ?? null;
         $environment = $snapshot->metadata['env'] ?? null;
 
-        if ($localId === null || ! ctype_digit($localId) || $environment !== app()->environment()) {
+        if ($localId === null || ! Str::isUuid($localId) || $environment !== app()->environment()) {
             return null;
         }
 
-        return Generation::query()->find((int) $localId);
+        return Generation::query()->where('idempotency_key', $localId)->first();
     }
 }

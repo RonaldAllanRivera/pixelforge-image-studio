@@ -154,12 +154,22 @@ final readonly class PixelforgeClient
             'not_found' => new NotFound($message, $code),
             'idempotency_key_reused' => new IdempotencyKeyReused($message, $code),
             'validation_failed' => new ValidationFailed($message, $this->validationErrors($response)),
-            // A 4xx means Pixelforge refused the request. Anything else (5xx, redirects) leaves
-            // us not knowing whether the generation was created. The body is never copied into
-            // the message: it could echo anything back.
-            default => $response->clientError()
-                ? new Rejected($message, $code)
-                : new OutcomeUnknown("Pixelforge answered HTTP {$response->status()}.", $code),
+            default => $this->unknownFailure($response, $message, $code),
+        };
+    }
+
+    /**
+     * An error code we don't know. A 429 is a limit, so wait. A 408 means the request never
+     * fully arrived, and a 5xx or redirect leaves us not knowing whether the generation was
+     * created. Any other 4xx means Pixelforge refused it. The body is never copied into a
+     * message: it could echo anything back.
+     */
+    private function unknownFailure(Response $response, string $message, ?string $code): PixelforgeException
+    {
+        return match (true) {
+            $response->status() === 429 => new RateLimited($message, $code, $this->retryAfter($response) ?? 60),
+            $response->status() === 408, ! $response->clientError() => new OutcomeUnknown("Pixelforge answered HTTP {$response->status()}.", $code),
+            default => new Rejected($message, $code),
         };
     }
 

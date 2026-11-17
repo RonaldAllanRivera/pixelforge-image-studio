@@ -2,6 +2,24 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Review fixes (2026-11-17)
+
+An independent review of Phases 0–6 confirmed the money path (exact costs, one charge per generation, failures free) and found these, each fixed with a test that failed first:
+
+### Fixed
+
+- The submit job gave up after 5 POSTs of any kind once Pixelforge said "overloaded", so a single random 503 after a few rate limits failed the generation. Now only overloaded answers count (new `overloaded_attempts` column), and the 2, 4, 8, 16-second backoff uses that count.
+- The free-slot check counted every queued or processing row, however old, so three rows with lost webhooks could block every new generation. Rows with no news for 10 minutes no longer count.
+- Deleting an account deleted its generations, which are billing records. They now stay, with `user_id` set to null.
+- A `409 idempotency_key_reused` proves a generation exists, but failed it at no cost. It now stays pending, and an error is logged.
+- A 429 with an unknown error code now waits (retry later) instead of failing, and a 408 is treated as an unknown outcome.
+- `metadata.local_id` is now the generation's UUID instead of its numeric id, which a database reset could reuse and point an old webhook at a new generation.
+- Polling stops after 16 polls instead of 15 minutes after creation, so a generation that waited long for a slot is still polled.
+- A submit retry that finds Pixelforge already accepted the generation now starts polling it.
+- The waiting reason is cleared once Pixelforge accepts the generation.
+- A waiting submit job touches its row, so the hourly reconcile doesn't start a second job for it.
+- Both jobs back off 10, 30 and 60 seconds after an unexpected error instead of retrying in a tight loop.
+
 ## Phase 6: Polling and the hourly catch-up (2026-11-17)
 
 ### Added

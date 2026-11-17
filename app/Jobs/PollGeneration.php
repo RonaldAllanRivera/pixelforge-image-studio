@@ -26,8 +26,16 @@ final class PollGeneration implements ShouldQueue
     /** Seconds before poll 1, 2 and 3. Every later poll waits a minute. */
     private const WAITS = [20, 30, 45];
 
-    /** After this, the hourly reconcile command takes over. */
-    private const STOP_AFTER_MINUTES = 15;
+    /** 16 polls cover about 15 minutes. After that, the hourly reconcile command takes over. */
+    private const MAX_POLLS = 16;
+
+    /**
+     * Seconds to wait after an unexpected exception, so a failing poll never retries in a
+     * tight loop that uses up the shared Pixelforge rate limit.
+     *
+     * @var list<int>
+     */
+    public array $backoff = [10, 30, 60];
 
     public function __construct(
         public Generation $generation,
@@ -52,7 +60,7 @@ final class PollGeneration implements ShouldQueue
 
     public function retryUntil(): CarbonInterface
     {
-        return now()->addMinutes(self::STOP_AFTER_MINUTES);
+        return now()->addMinutes(15);
     }
 
     public function handle(PixelforgeClient $client, ApplyGenerationSnapshot $apply): void
@@ -92,7 +100,9 @@ final class PollGeneration implements ShouldQueue
 
     private function pollAgain(Generation $generation): void
     {
-        if ($generation->created_at === null || $generation->created_at->diffInMinutes(now()) >= self::STOP_AFTER_MINUTES) {
+        // Counted from the first poll, not from creation: a generation can wait a long time
+        // for a free slot before Pixelforge even accepts it.
+        if ($this->poll >= self::MAX_POLLS) {
             return; // the hourly reconcile command catches anything still running
         }
 

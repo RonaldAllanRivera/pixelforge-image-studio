@@ -55,6 +55,7 @@ final readonly class ApplyGenerationSnapshot
             $locked->completed_at = $snapshot->completedAt ?? $locked->completed_at;
             $locked->image_url = $snapshot->imageUrl;
             $locked->image_url_expires_at = $snapshot->imageUrlExpiresAt;
+            $locked->waiting_reason = null; // Pixelforge has it now, so it's no longer waiting on us
             $locked->last_synced_at = now();
 
             if ($snapshot->status === GenerationStatus::Succeeded) {

@@ -82,7 +82,7 @@ test('ends in the right state when events arrive out of order', function () {
 test('finds the generation by our own id when the webhook beats the create response', function () {
     $generation = Generation::factory()->create(['status' => GenerationStatus::Pending]);
     $event = Pixelforge::load('event-generation-failed');
-    $event['data']['object']['metadata'] = ['local_id' => (string) $generation->id, 'env' => 'testing'];
+    $event['data']['object']['metadata'] = ['local_id' => $generation->idempotency_key, 'env' => 'testing'];
 
     postPixelforgeWebhook($this, $event)->assertNoContent();
 
@@ -96,7 +96,7 @@ test('ignores our id when the event comes from another environment', function ()
     Log::spy();
     $generation = Generation::factory()->create(['status' => GenerationStatus::Pending]);
     $event = Pixelforge::load('event-generation-failed');
-    $event['data']['object']['metadata'] = ['local_id' => (string) $generation->id, 'env' => 'production'];
+    $event['data']['object']['metadata'] = ['local_id' => $generation->idempotency_key, 'env' => 'production'];
 
     postPixelforgeWebhook($this, $event)->assertNoContent();
 

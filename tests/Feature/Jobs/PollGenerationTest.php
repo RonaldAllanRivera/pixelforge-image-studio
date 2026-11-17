@@ -55,13 +55,26 @@ test('polls again later while the generation is still running', function (int $p
     'after the 10th poll' => [10, 60],
 ]);
 
-test('stops polling 15 minutes after the generation was created, leaving it to reconcile', function () {
-    $this->travel(16)->minutes();
+test('stops after 16 polls (about 15 minutes), leaving it to reconcile', function () {
     Http::fake([$this->url => Http::response([...Pixelforge::load('generation-succeeded'), 'status' => 'processing', 'usage' => null, 'image_url' => null])]);
 
-    runPollGeneration($this->generation, 12);
+    runPollGeneration($this->generation, 16);
 
     Queue::assertNotPushed(PollGeneration::class);
+});
+
+test('keeps polling a generation that Pixelforge accepted long after it was created', function () {
+    // It waited a long time for a free slot; its polling window starts when polling starts.
+    $this->travel(40)->minutes();
+    Http::fake([$this->url => Http::response([...Pixelforge::load('generation-succeeded'), 'status' => 'processing', 'usage' => null, 'image_url' => null])]);
+
+    runPollGeneration($this->generation, 2);
+
+    Queue::assertPushed(PollGeneration::class, fn (PollGeneration $job) => $job->poll === 3);
+});
+
+test('backs off when it fails unexpectedly, instead of retrying in a tight loop', function () {
+    expect((new PollGeneration($this->generation))->backoff)->toBe([10, 30, 60]);
 });
 
 test('does not call Pixelforge about a finished generation', function () {

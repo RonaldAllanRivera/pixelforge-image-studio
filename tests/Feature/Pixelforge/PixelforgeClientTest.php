@@ -122,6 +122,7 @@ test('groups errors by what to do next', function (int $status, array $body, str
     'content policy: rejected, nothing created' => [400, Pixelforge::load('error-content-policy'), Rejected::class],
     'daily limit: rejected, nothing created' => [429, Pixelforge::error('rate_limit_error', 'daily_limit_exceeded'), Rejected::class],
     'an error code we do not know: rejected' => [422, Pixelforge::error('invalid_request_error', 'date_range_too_long'), Rejected::class],
+    'a 429 with a code we do not know: retry later' => [429, Pixelforge::error('rate_limit_error', 'some_new_limit'), RetryLater::class],
     'rate limit: retry later' => [429, Pixelforge::error('rate_limit_error', 'rate_limit_exceeded'), RetryLater::class],
     'concurrency limit: retry later' => [429, Pixelforge::error('rate_limit_error', 'concurrency_limit_exceeded'), RetryLater::class],
     'overloaded: retry later' => [503, Pixelforge::load('error-overloaded'), RetryLater::class],
@@ -167,6 +168,7 @@ test('reports an unknown outcome when it cannot tell whether Pixelforge created 
     'server error' => [fn () => Http::response(Pixelforge::error('api_error', 'internal_error'), 500)],
     'gateway page' => [fn () => Http::response('<html>Bad gateway</html>', 502)],
     'success without a generation' => [fn () => Http::response(['hello' => 'world'], 202)],
+    'request timeout (408)' => [fn () => Http::response('', 408)],
 ]);
 
 test('never puts the API key or the response body in an error message', function () {

@@ -2,6 +2,7 @@
 
 use App\Actions\ApplyGenerationSnapshot;
 use App\Enums\GenerationStatus;
+use App\Enums\WaitingReason;
 use App\Models\Generation;
 use Illuminate\Support\Facades\Log;
 use Tests\Fixtures\Pixelforge;
@@ -24,6 +25,14 @@ test('links the generation to Pixelforge and moves it forward', function () {
 
     expect($generation->status)->toBe(GenerationStatus::Processing)
         ->and($generation->started_at?->toIso8601ZuluString())->toBe('2026-11-17T00:19:50Z');
+});
+
+test('clears the waiting reason once Pixelforge accepts the generation', function () {
+    $this->generation->forceFill(['waiting_reason' => WaitingReason::FreeSlot])->save();
+
+    $this->apply->handle($this->generation, Pixelforge::snapshot('generation-queued'));
+
+    expect($this->generation->fresh()->waiting_reason)->toBeNull();
 });
 
 test('records the exact cost and charge when it succeeds', function () {

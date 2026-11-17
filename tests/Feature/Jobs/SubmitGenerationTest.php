@@ -4,6 +4,7 @@ use App\Enums\GenerationStatus;
 use App\Enums\ImageQuality;
 use App\Enums\ImageSize;
 use App\Enums\WaitingReason;
+use App\Jobs\PollGeneration;
 use App\Jobs\SubmitGeneration;
 use App\Models\Generation;
 use Illuminate\Http\Client\Request;
@@ -51,7 +52,7 @@ test('sends the saved request with the generation\'s own idempotency key', funct
             'size' => '1536x1024',
             'quality' => 'medium',
             'reference_images' => ['https://example.com/reference-1.png'],
-            'metadata' => ['local_id' => (string) $this->generation->id, 'env' => 'testing'],
+            'metadata' => ['local_id' => $this->generation->idempotency_key, 'env' => 'testing'],
         ]);
 
     expect($this->generation->fresh())
@@ -61,13 +62,36 @@ test('sends the saved request with the generation\'s own idempotency key', funct
     $job->assertNotReleased();
 });
 
-test('does nothing once Pixelforge has the generation', function () {
+test('does not submit again once Pixelforge has the generation, but makes sure it is polled', function () {
+    // An earlier attempt timed out, yet Pixelforge created it and a webhook already moved it on.
     Http::fake();
-    $this->generation->update(['status' => GenerationStatus::Queued]);
+    $this->generation->forceFill(['status' => GenerationStatus::Queued, 'provider_id' => 'gen_1'])->save();
 
     runSubmitGeneration($this->generation)->assertNotReleased();
 
     Http::assertNothingSent();
+    Queue::assertPushed(PollGeneration::class, fn (PollGeneration $job) => $job->generation->is($this->generation));
+});
+
+test('ignores running generations with no news for 10 minutes when counting free slots', function () {
+    fakePixelforgeCreate(Http::response(Pixelforge::load('generation-queued'), 202));
+    Generation::factory()->count(3)->create(['status' => GenerationStatus::Processing]);
+    $this->travel(11)->minutes();
+
+    runSubmitGeneration($this->generation)->assertNotReleased();
+
+    expect($this->generation->fresh()->status)->toBe(GenerationStatus::Queued);
+});
+
+test('marks the generation as alive while it waits, so reconcile does not start a second job', function () {
+    Http::fake();
+    $this->travel(3)->minutes();
+    Generation::factory()->count(3)->create(['status' => GenerationStatus::Queued]);
+
+    runSubmitGeneration($this->generation)->assertReleased(5);
+    $this->artisan('generations:reconcile')->assertSuccessful();
+
+    Queue::assertNotPushed(SubmitGeneration::class);
 });
 
 test('waits for a free slot while three generations are already running', function () {
@@ -99,9 +123,9 @@ test('waits out a rate limit', function () {
     expect($this->generation->fresh()->waiting_reason)->toBe(WaitingReason::RateLimit);
 });
 
-test('retries an overloaded Pixelforge with growing waits', function (int $previousAttempts, int $wait) {
+test('retries an overloaded Pixelforge with growing waits', function (int $previousOverloads, int $wait) {
     fakePixelforgeCreate(Http::response(Pixelforge::load('error-overloaded'), 503, ['Retry-After' => '2']));
-    $this->generation->forceFill(['submit_attempts' => $previousAttempts])->save();
+    $this->generation->forceFill(['overloaded_attempts' => $previousOverloads])->save();
 
     runSubmitGeneration($this->generation)->assertReleased($wait);
 
@@ -115,9 +139,19 @@ test('retries an overloaded Pixelforge with growing waits', function (int $previ
     'fourth try' => [3, 16],
 ]);
 
+test('counts only overloaded answers toward giving up, not other waits', function () {
+    // Seven earlier attempts were rate limits, slot waits or timeouts. This is the first "overloaded".
+    fakePixelforgeCreate(Http::response(Pixelforge::load('error-overloaded'), 503, ['Retry-After' => '2']));
+    $this->generation->forceFill(['submit_attempts' => 7])->save();
+
+    runSubmitGeneration($this->generation)->assertReleased(2);
+
+    expect($this->generation->fresh()->status)->toBe(GenerationStatus::Pending);
+});
+
 test('gives up on an overloaded Pixelforge after five tries, at no cost', function () {
     fakePixelforgeCreate(Http::response(Pixelforge::load('error-overloaded'), 503, ['Retry-After' => '2']));
-    $this->generation->forceFill(['submit_attempts' => 4])->save();
+    $this->generation->forceFill(['overloaded_attempts' => 4])->save();
 
     runSubmitGeneration($this->generation)->assertNotReleased();
 
@@ -153,8 +187,18 @@ test('reports our own mistakes loudly', function (int $status, array $body) {
 })->with([
     'validation failed' => [422, Pixelforge::load('error-validation')],
     'invalid API key' => [401, Pixelforge::load('error-invalid-api-key')],
-    'idempotency key reused' => [409, Pixelforge::load('error-idempotency-key-reused')],
 ]);
+
+test('never fails a generation when Pixelforge says its key was used with other parameters', function () {
+    // A 409 proves a generation already exists under this key, so failing it for free would lose money.
+    Log::spy();
+    fakePixelforgeCreate(Http::response(Pixelforge::load('error-idempotency-key-reused'), 409));
+
+    runSubmitGeneration($this->generation)->assertNotReleased();
+
+    expect($this->generation->fresh()->status)->toBe(GenerationStatus::Pending);
+    Log::shouldHaveReceived('error')->once();
+});
 
 test('keeps a generation pending after a timeout and retries with the same key', function () {
     fakePixelforgeCreate(Http::sequence()
@@ -179,6 +223,10 @@ test('shares the Pixelforge rate limit with every other Pixelforge call', functi
     expect((new SubmitGeneration($this->generation))->middleware())
         ->toHaveCount(1)
         ->{0}->toBeInstanceOf(RateLimited::class);
+});
+
+test('backs off when it fails unexpectedly, instead of retrying in a tight loop', function () {
+    expect((new SubmitGeneration($this->generation))->backoff)->toBe([10, 30, 60]);
 });
 
 test('keeps trying for 30 minutes before leaving it to the scheduled check', function () {
