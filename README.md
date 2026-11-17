@@ -99,7 +99,7 @@ Prompt keywords force Pixelforge's behaviour, so every path can be tried by hand
 
 ## Decisions
 
-The choices the brief left open, and why, are in [docs/DECISIONS.md](docs/DECISIONS.md) _(pending)_.
+The choices the brief left open, and why, are in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Known limits and next steps
 

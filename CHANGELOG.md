@@ -2,6 +2,17 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Phase 1: Money (2026-11-17)
+
+### Added
+
+- `Nanodollars`: money as whole nanodollars. Parses and writes Pixelforge's 9-decimal strings exactly, formats amounts for display, and adds the markup. The markup, rounded up, is the only rounding in the app.
+- `TokenRates`: turns Pixelforge's "USD per 1M tokens" rates into whole nanodollars per token, and refuses a rate that would need rounding.
+- `PriceSheet`: the token rules from `GET /v1/pricing` (output tokens by quality and size, reasoning ranges, 765 tokens per reference image), read from the real response.
+- `PricingCalculator`: the exact cost of any token usage, the user's charge, and a quote (estimate and maximum) before a generation runs. Tested against the docs' worst case ($0.373875), the docs' `/v1/usage` example ($0.169080000), and a live generation.
+- The 25% markup in `config/pricing.php`.
+- `docs/DECISIONS.md`.
+
 ## Phase 0: Project setup (2026-11-17)
 
 ### Added
