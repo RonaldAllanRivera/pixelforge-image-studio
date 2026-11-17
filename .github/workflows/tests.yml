@@ -56,6 +56,11 @@ jobs:
         with:
           node-version: '22'
 
+      # npm on Windows leaves Linux-only optional packages' dependencies out of the lock file,
+      # and the deploy's `npm ci` then fails. `npm ci` here fails first.
+      - name: Check the lock file installs on Linux
+        run: npm ci --no-audit --no-fund
+
       - name: Setup Application
         run: composer setup
 

@@ -2,6 +2,12 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Deployment fixes (2026-11-17)
+
+### Fixed
+
+- The first Laravel Cloud build failed at `npm ci` with "Missing: react from lock file". npm on Windows had left the dependencies of `@laravel/multiplex` (an optional package for macOS and Linux only) out of `package-lock.json`. The lock file is now generated on Linux, and CI runs `npm ci` so a lock file the deploy can't install fails CI first.
+
 ## Review fixes (2026-11-17)
 
 An independent review of Phases 0–6 confirmed the money path (exact costs, one charge per generation, failures free) and found these, each fixed with a test that failed first:

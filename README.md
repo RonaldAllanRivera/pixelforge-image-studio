@@ -80,6 +80,12 @@ php artisan db:seed           # test@example.com and admin@example.com, both wit
 composer run dev              # app on http://localhost:8000, plus the queue worker and Vite
 ```
 
+On Windows, `npm install` leaves the dependencies of Linux-only optional packages out of `package-lock.json` (an npm bug), and the Linux deploy's `npm ci` then fails. CI runs `npm ci` to catch it. To fix the lock file, regenerate it on Linux:
+
+```bash
+docker run --rm -v "${PWD}:/Pixelforge" -w /Pixelforge node:22-alpine npm install --package-lock-only
+```
+
 Pixelforge can't reach `localhost`, so open a tunnel and paste its URL into the Pixelforge dashboard as the webhook URL (`https://<tunnel>/webhooks/pixelforge`):
 
 ```bash
