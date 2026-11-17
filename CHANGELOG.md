@@ -2,6 +2,19 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Phase 4: Submitting generations (2026-11-17)
+
+### Added
+
+- `CreateGeneration`: saves the user's generation as pending with its estimate and maximum price, then queues it for Pixelforge once the row is committed.
+- `SubmitGeneration` job: sends the generation with its own `Idempotency-Key` and an identical body on every attempt, so Pixelforge creates it at most once. Our generation id goes in `metadata`, so a webhook can find it even before the create response arrives.
+    - Waits for a free slot when 3 generations are already running, and when Pixelforge reports its concurrency limit.
+    - Waits out rate limits for as long as `Retry-After` says. All Pixelforge calls share one 50-per-minute limiter.
+    - Retries an overloaded Pixelforge after 2, 4, 8 and 16 seconds, then fails the generation at no cost.
+    - Fails at no cost when Pixelforge rejects the request (content policy, daily limit), and logs an error when the rejection points to our own mistake.
+    - Keeps the generation pending after a timeout or unclear answer and retries with the same key, never marking it failed.
+- `WaitingReason`: why a pending generation is waiting (free slot, rate limit, overloaded, unknown outcome), for the UI.
+
 ## Phase 3: Generations and the one place their status and money change (2026-11-17)
 
 ### Added

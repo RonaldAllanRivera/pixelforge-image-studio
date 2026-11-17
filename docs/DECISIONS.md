@@ -54,6 +54,14 @@ The page promises the user they'll never pay more than the maximum shown before 
 
 Once a generation is linked to a Pixelforge id, a report carrying another id is logged and ignored rather than applied. That guards against a lookup bug ever charging one generation for another.
 
+## Submitting: wait, retry or fail, by error family
+
+The submit job reads what to do from the error family. _Retry later_: release the job for the time Pixelforge asks (a free slot, a rate limit), or back off 2, 4, 8 and 16 seconds when overloaded, then fail at no cost after the fifth try. _Rejected_: nothing was created, so fail it at no cost. _Unknown outcome_: keep it pending and retry with the same key. Before sending, the job also counts our generations already queued or processing, so it waits for a free slot instead of spending a request on a certain 429. Pixelforge's own limit is still handled when another key is using the account. The job retries for 30 minutes (`retryUntil`, not a fixed number of tries, because waiting for a slot can take many releases). After that, the scheduled reconcile command picks the generation up again.
+
+## Why failing after an unknown outcome is still safe
+
+If a first attempt timed out, Pixelforge may have created the generation. A later retry carries the same `Idempotency-Key`, and Pixelforge answers a known key with the existing generation (`Idempotent-Replayed: true`). Its docs say a replay doesn't count against the concurrency or daily limits, which implies the key is checked before those limits apply. So a retry that comes back _rejected_ means that key has no generation behind it, and failing locally can't lose a billed generation. The one case this assumption doesn't cover is an `overloaded` answer sent before the key is checked. The cost would be a single generation Pixelforge bills but the user isn't charged for, which the admin report would show as a mismatch.
+
 ## Sign-up and login only
 
 The starter kit's email verification, two-factor login and passkeys were left out. They don't serve this app, and email verification would lock out anyone testing a deployment without a mail service.

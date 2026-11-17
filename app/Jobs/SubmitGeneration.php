@@ -1,0 +1,178 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Actions\ApplyGenerationSnapshot;
+use App\Enums\GenerationStatus;
+use App\Enums\WaitingReason;
+use App\Models\Generation;
+use App\Pixelforge\Exceptions\ConcurrencyLimited;
+use App\Pixelforge\Exceptions\IdempotencyKeyReused;
+use App\Pixelforge\Exceptions\InvalidApiKey;
+use App\Pixelforge\Exceptions\OutcomeUnknown;
+use App\Pixelforge\Exceptions\Overloaded;
+use App\Pixelforge\Exceptions\RateLimited as PixelforgeRateLimited;
+use App\Pixelforge\Exceptions\Rejected;
+use App\Pixelforge\Exceptions\RetryLater;
+use App\Pixelforge\Exceptions\ValidationFailed;
+use App\Pixelforge\NewGeneration;
+use App\Pixelforge\PixelforgeClient;
+use Carbon\CarbonInterface;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\RateLimited;
+use Illuminate\Support\Facades\Log;
+use Throwable;
+
+/**
+ * Sends a pending generation to Pixelforge, waiting and retrying as Pixelforge asks.
+ *
+ * Every attempt sends the generation's own Idempotency-Key and the same body, so however
+ * many times this runs, Pixelforge creates the generation at most once.
+ */
+final class SubmitGeneration implements ShouldQueue
+{
+    use Queueable;
+
+    /** Pixelforge runs at most this many generations at once per account, across all keys. */
+    private const PIXELFORGE_CONCURRENCY = 3;
+
+    /** After this many "overloaded" answers we stop and fail the generation, at no cost. */
+    private const MAX_ATTEMPTS_WHEN_OVERLOADED = 5;
+
+    public function __construct(
+        public Generation $generation,
+    ) {}
+
+    /**
+     * @return list<object>
+     */
+    public function middleware(): array
+    {
+        return [new RateLimited('pixelforge')];
+    }
+
+    /**
+     * Waiting for a free slot releases the job many times, so limit it by time, not attempts.
+     * Anything still pending after this is picked up by the scheduled reconcile command.
+     */
+    public function retryUntil(): CarbonInterface
+    {
+        return now()->addMinutes(30);
+    }
+
+    public function handle(PixelforgeClient $client, ApplyGenerationSnapshot $apply): void
+    {
+        $generation = $this->generation->fresh();
+
+        if ($generation === null || $generation->status !== GenerationStatus::Pending) {
+            return;
+        }
+
+        if ($this->runningAtPixelforge() >= self::PIXELFORGE_CONCURRENCY) {
+            $this->waitFor($generation, WaitingReason::FreeSlot, seconds: 5);
+
+            return;
+        }
+
+        $generation->increment('submit_attempts');
+
+        try {
+            $snapshot = $client->createGeneration($this->request($generation), $generation->idempotency_key);
+        } catch (RetryLater $e) {
+            $this->retryLater($generation, $e, $apply);
+
+            return;
+        } catch (Rejected $e) {
+            $this->reportIfOurMistake($generation, $e);
+            $apply->failBeforeAccepted($generation, $e->errorCode ?? 'rejected', $e->getMessage());
+
+            return;
+        } catch (OutcomeUnknown $e) {
+            // Pixelforge may have created it. Never fail it: retrying with the same key returns it.
+            Log::warning('Unknown outcome submitting a generation; retrying with the same key.', [
+                'generation' => $generation->id,
+                'reason' => $e->getMessage(),
+            ]);
+            $this->waitFor($generation, WaitingReason::UnknownOutcome, seconds: 10);
+
+            return;
+        }
+
+        $apply->handle($generation, $snapshot);
+    }
+
+    /**
+     * Retries ran out. The generation stays pending: the scheduled reconcile command will
+     * submit it again with the same Idempotency-Key.
+     */
+    public function failed(?Throwable $exception): void
+    {
+        Log::warning('Stopped retrying a generation submit; reconcile will pick it up.', [
+            'generation' => $this->generation->id,
+            'reason' => $exception?->getMessage(),
+        ]);
+    }
+
+    private function retryLater(Generation $generation, RetryLater $e, ApplyGenerationSnapshot $apply): void
+    {
+        if ($e instanceof ConcurrencyLimited) {
+            $this->waitFor($generation, WaitingReason::FreeSlot, $e->retryAfter);
+        } elseif ($e instanceof PixelforgeRateLimited) {
+            $this->waitFor($generation, WaitingReason::RateLimit, $e->retryAfter);
+        } elseif ($e instanceof Overloaded && $generation->submit_attempts >= self::MAX_ATTEMPTS_WHEN_OVERLOADED) {
+            $apply->failBeforeAccepted($generation, 'overloaded', $e->getMessage());
+        } else {
+            // Overloaded: wait 2, 4, 8, then 16 seconds, or longer if Pixelforge asks.
+            $this->waitFor($generation, WaitingReason::Overloaded, max($e->retryAfter, 2 ** $generation->submit_attempts));
+        }
+    }
+
+    private function waitFor(Generation $generation, WaitingReason $reason, int $seconds): void
+    {
+        $generation->waiting_reason = $reason;
+        $generation->save();
+
+        $this->release($seconds);
+    }
+
+    /**
+     * These rejections mean a bug or a misconfiguration on our side, not a user problem.
+     */
+    private function reportIfOurMistake(Generation $generation, Rejected $e): void
+    {
+        if ($e instanceof ValidationFailed || $e instanceof InvalidApiKey || $e instanceof IdempotencyKeyReused) {
+            Log::error('Pixelforge rejected a generation because of our own mistake.', [
+                'generation' => $generation->id,
+                'code' => $e->errorCode,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function runningAtPixelforge(): int
+    {
+        return Generation::query()
+            ->whereIn('status', [GenerationStatus::Queued, GenerationStatus::Processing])
+            ->count();
+    }
+
+    /**
+     * Built only from stored fields, so every attempt sends the same body: Pixelforge refuses
+     * a reused Idempotency-Key with different parameters.
+     */
+    private function request(Generation $generation): NewGeneration
+    {
+        return new NewGeneration(
+            prompt: $generation->prompt,
+            size: $generation->size,
+            quality: $generation->quality,
+            referenceImages: $generation->reference_images,
+            metadata: [
+                // Lets a webhook find this generation even before the create response arrives.
+                'local_id' => (string) $generation->id,
+                'env' => (string) app()->environment(),
+            ],
+        );
+    }
+}

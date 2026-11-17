@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\GenerationStatus;
 use App\Enums\ImageQuality;
 use App\Enums\ImageSize;
+use App\Enums\WaitingReason;
 use Carbon\CarbonImmutable;
 use Database\Factories\GenerationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -21,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $provider_id
  * @property string $idempotency_key
  * @property GenerationStatus $status
+ * @property WaitingReason|null $waiting_reason
  * @property string $prompt
  * @property ImageSize $size
  * @property ImageQuality $quality
@@ -65,6 +67,7 @@ class Generation extends Model
     {
         return [
             'status' => GenerationStatus::class,
+            'waiting_reason' => WaitingReason::class,
             'size' => ImageSize::class,
             'quality' => ImageQuality::class,
             'reference_images' => 'array',
