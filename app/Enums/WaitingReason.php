@@ -18,4 +18,15 @@ enum WaitingReason: string
 
     /** Pixelforge didn't answer clearly; we're checking with the same Idempotency-Key. */
     case UnknownOutcome = 'unknown_outcome';
+
+    /** What the user sees on the generation's status badge. */
+    public function label(): string
+    {
+        return match ($this) {
+            self::FreeSlot => 'Waiting for a free slot',
+            self::RateLimit => 'Waiting: Pixelforge rate limit',
+            self::Overloaded => 'Retrying: Pixelforge is busy',
+            self::UnknownOutcome => 'Checking with Pixelforge',
+        };
+    }
 }

@@ -2,6 +2,35 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Phase 7: The Studio UI (2026-11-17)
+
+### Added
+
+- **Studio** (`/studio`, where login lands): the form to generate an image and the user's history below it.
+    - The prompt counter counts Unicode characters, as Pixelforge does, so an emoji is one.
+    - Size and quality are buttons, and each quality shows its own price.
+    - Up to 4 reference image URLs, each showing its +765 tokens.
+    - The live price ("Estimated … · never more than …") comes from a new quote endpoint and updates 300 ms after typing stops. "How this price is made" breaks it down by token type.
+    - The history shows 12 per page, newest first. Each card has the image, a status badge (with the waiting reason, or elapsed time while generating), and the estimated and actual cost. Failed cards give a plain-English reason, "You were not charged", and Try again, which refills the form.
+    - The history refreshes every 2 seconds only while a generation on the page is running, and stops once all are final.
+- **Detail page** (`/generations/{id}`, owner only): estimated, maximum and actual tokens per type at the generation's own rates, the cost to 9 decimals, our fee, the charge, Pixelforge's id and the timestamps.
+- Every amount is formatted on the server by API resources (`GenerationResource`, `GenerationDetailResource`); the browser never does money math.
+- The token counts behind each quote are stored (`quoted_usage`), so the detail page can compare them with the actual ones.
+- Validation copies Pixelforge's rules (4,000 characters, 4 `http(s)` reference URLs, the known sizes and qualities), so we never send a request it would reject.
+- A simple landing page, sidebar links to this repository and its README, and a new logo and favicon replace the starter kit's.
+
+### Changed
+
+- The webhook route moved out of the `web` middleware group (no session, cookies or CSRF), so a webhook delivery no longer creates a session row.
+- Tests no longer need built front-end assets (`withoutVite()`).
+
+### Fixed after an independent review
+
+- "Never more than" could show less than the real cap: amounts rounded half up, so $0.340025 showed as $0.3400. Maxima now round up (`Nanodollars::formatAtMost()`), so the shown maximum is never below what a charge can reach.
+- The live price could belong to the previous inputs for a moment, and a prompt over 4,000 characters left "Working out the price…" on screen forever. The price now dims with "Updating…" until it matches the form, Generate waits for it, and a too-long prompt or an unreachable server says so.
+- Polling could run forever for a generation stuck by design (left pending after a `409`, or a poll Pixelforge rejected). A generation with no news for 15 minutes is now "stalled": the page stops polling it and says the hourly check will pick it up. Polls also wait for each answer before the next one, and pause in a hidden tab.
+- `/generations/abc` was a server error; it's now a 404.
+
 ## Deployment (2026-11-17)
 
 ### Added

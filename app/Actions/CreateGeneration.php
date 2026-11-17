@@ -45,6 +45,10 @@ final readonly class CreateGeneration
                 'estimated_charge_nano' => $quote->estimatedCharge,
                 'max_cost_nano' => $quote->maximumCost,
                 'max_charge_nano' => $quote->maximumCharge,
+                'quoted_usage' => [
+                    'estimated' => $quote->estimatedUsage->toArray(),
+                    'maximum' => $quote->maximumUsage->toArray(),
+                ],
             ]);
 
             // After the commit, so the worker can never start before the row exists.

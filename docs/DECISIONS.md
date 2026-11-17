@@ -80,6 +80,22 @@ Webhooks aren't guaranteed, so every accepted generation is also polled: after 2
 
 The app scales to zero when nobody is using it, and queued jobs don't wake a sleeping app. A managed queue has its own workers, which wake when a job arrives and cost nothing while idle, so a generation keeps moving after the user closes the tab. Our jobs fit its limits: delayed dispatches wait at most 60 seconds (the limit is 15 minutes), every job finishes far inside the 90-second Flex limit, and every job is safe to run twice, which matters because SQS may deliver a job more than once. Webhooks don't need the queue at all (see above). Not chosen: a `queue:work` process on the app, which stops when the app sleeps, and an always-on worker, which costs money around the clock.
 
+## Every amount is formatted on the server
+
+The browser gets money only as display strings ("$0.0722", or "$0.072206250" on the detail page), made by `Nanodollars::format()` in API resources and the quote endpoint. A maximum ("never more than") is formatted rounding up (`formatAtMost()`), so the four-decimal figure is never below the real cap. JavaScript numbers are floats, so doing money math in the browser could show a price that differs from the one we charge. The prompt counter in the browser counts characters with `Array.from()` (code points, like `mb_strlen`), but that's only for display: the server validates and prices the prompt.
+
+## Live status: polling, only while something is running
+
+The Studio and the detail page refresh their generation data every 2 seconds with Inertia's `usePoll`, reloading only that one prop, and only while a generation on the page isn't final. Once everything is final, polling stops. So an idle tab costs nothing and lets the app scale to zero. A generation with no news for 15 minutes counts as stalled: by then polling and submit retries have given up, and only the hourly reconcile checks it, so the page stops asking too. Each poll waits for the previous answer, so answers can't arrive out of order. Not chosen: WebSockets (Reverb), which would push updates instantly but cost money on Laravel Cloud and keep the app awake.
+
+## The quote's token counts are stored
+
+When a generation is created, the token counts behind its estimate and its maximum are saved with it (`quoted_usage`). The detail page can then show estimated vs actual tokens per type, which is the honest answer to "why did this cost less than estimated?" (usually reasoning). Recomputing them later from today's price sheet could give different numbers if Pixelforge changed its token rules.
+
+## Webhooks run outside the session stack
+
+The webhook route is loaded outside the `web` middleware group: no session, cookies or CSRF token. Pixelforge signs each delivery instead. Inside the `web` group every delivery started a session, which in production is a database row per webhook.
+
 ## Sign-up and login only
 
 The starter kit's email verification, two-factor login and passkeys were left out. They don't serve this app, and email verification would lock out anyone testing a deployment without a mail service.

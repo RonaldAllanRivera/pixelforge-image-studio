@@ -30,6 +30,13 @@ test('formats for display, rounding half up', function () {
         ->and(Nanodollars::format(5_000_000_000, 2))->toBe('$5.00');
 });
 
+test('formats a maximum rounding up, so "never more than" is never below the real cap', function () {
+    expect(Nanodollars::formatAtMost(340_025_000))->toBe('$0.3401')
+        ->and(Nanodollars::formatAtMost(21_837_500))->toBe('$0.0219')
+        ->and(Nanodollars::formatAtMost(340_000_000))->toBe('$0.3400')
+        ->and(Nanodollars::formatAtMost(340_025_000, 9))->toBe('$0.340025000');
+});
+
 test('adds the markup exactly when the cost divides evenly', function () {
     // The live test generation on 2026-11-17: 10 text, 280 output and 480 reasoning tokens.
     expect(Nanodollars::addMarkup(17_250_000, 25))->toBe(21_562_500);

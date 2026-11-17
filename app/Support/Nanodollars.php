@@ -48,6 +48,17 @@ final class Nanodollars
     }
 
     /**
+     * Format a maximum ("never more than"), rounding up, so the amount shown is never below
+     * the real cap the charge can reach. Display only: never store it.
+     *
+     * @param  int<0, 9>  $decimals
+     */
+    public static function formatAtMost(int $nanodollars, int $decimals = 4): string
+    {
+        return '$'.BigDecimal::ofUnscaledValue($nanodollars, self::DECIMALS)->toScale($decimals, RoundingMode::Up);
+    }
+
+    /**
      * Add a percentage markup, rounded up to the next whole nanodollar so rounding never
      * loses money. This is the only rounding of money in the app.
      */

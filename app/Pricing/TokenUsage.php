@@ -17,6 +17,21 @@ final readonly class TokenUsage
     ) {}
 
     /**
+     * The same keys Pixelforge uses, so `fromArray()` can read it back.
+     *
+     * @return array{input_text_tokens: int, input_image_tokens: int, output_tokens: int, reasoning_tokens: int}
+     */
+    public function toArray(): array
+    {
+        return [
+            'input_text_tokens' => $this->inputText,
+            'input_image_tokens' => $this->inputImage,
+            'output_tokens' => $this->output,
+            'reasoning_tokens' => $this->reasoning,
+        ];
+    }
+
+    /**
      * Build from the `usage` object Pixelforge sends with a succeeded generation.
      *
      * @param  array<string, mixed>  $usage

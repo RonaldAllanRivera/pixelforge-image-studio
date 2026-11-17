@@ -29,6 +29,15 @@ test('saves a pending generation with its estimate and maximum price', function 
         ->max_charge_nano->toBe(86_275_000);
 });
 
+test('stores the quoted token counts, so the detail page can compare them with the actual ones', function () {
+    $generation = app(CreateGeneration::class)->handle($this->user, 'A red fox', ImageSize::Square, ImageQuality::Medium, []);
+
+    expect($generation->fresh()->quoted_usage)->toBe([
+        'estimated' => ['input_text_tokens' => 3, 'input_image_tokens' => 0, 'output_tokens' => 1100, 'reasoning_tokens' => 1100],
+        'maximum' => ['input_text_tokens' => 4, 'input_image_tokens' => 0, 'output_tokens' => 1100, 'reasoning_tokens' => 2000],
+    ]);
+});
+
 test('prices reference images into the quote', function () {
     $generation = app(CreateGeneration::class)->handle($this->user, 'A red fox', ImageSize::Square, ImageQuality::Medium, [
         'https://example.com/a.png',

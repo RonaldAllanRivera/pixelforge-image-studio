@@ -14,6 +14,9 @@ abstract class TestCase extends BaseTestCase
 
         // Every HTTP call in a test must be faked. A real call to Pixelforge fails the test.
         Http::preventStrayRequests();
+
+        // Pages render without built assets, so a new page doesn't need `npm run build` first.
+        $this->withoutVite();
     }
 
     protected function skipUnlessFortifyHas(string $feature, ?string $message = null): void

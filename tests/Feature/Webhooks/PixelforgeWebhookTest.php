@@ -6,6 +6,7 @@ use App\Enums\ImageSize;
 use App\Models\Generation;
 use App\Models\WebhookEvent;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Log;
@@ -125,15 +126,18 @@ test('rejects a bad signature, a changed body and a stale timestamp, storing not
     }],
 ]);
 
-test('skips CSRF protection on the webhook route, because Pixelforge signs requests instead', function () {
+test('runs the webhook route without sessions, cookies or CSRF, because Pixelforge signs requests instead', function () {
     // Laravel skips CSRF checks while testing, so check the middleware the route really runs.
     // Creating the HTTP kernel registers the "web" group with the router, as a real request does.
     app(HttpKernel::class);
     $router = app('router');
-    $middleware = $router->gatherRouteMiddleware($router->getRoutes()->getByName('webhooks.pixelforge'));
+    $route = $router->getRoutes()->getByName('webhooks.pixelforge');
 
-    expect($middleware)->toContain(StartSession::class) // the web group really was expanded
-        ->not->toContain(PreventRequestForgery::class);
+    expect($router->gatherRouteMiddleware($route))
+        ->not->toContain(StartSession::class)
+        ->not->toContain(EncryptCookies::class)
+        ->not->toContain(PreventRequestForgery::class)
+        ->and($route->gatherMiddleware())->not->toContain('web');
 });
 
 test('answers a ping', function () {

@@ -8,15 +8,14 @@ A Laravel, Vue and Inertia app where signed-in users generate images through the
 
 ## Live app
 
-_(pending)_
-
-- URL: _(pending)_
+- URL: https://pixelforge-image-studio-production-jvfb2a.laravel.cloud
 - Logins: anyone can sign up as a normal user. A demo admin account for the usage report is listed here once deployed. The admin role can only read reports.
 
 ## What it does
 
-- **Generate:** write a prompt, pick a size and quality, and add up to 4 reference image URLs. The price updates as you type: an estimate, and the most it can cost.
-- **History:** every generation with its live status (queued, generating, succeeded or failed), the estimated and the actual cost, and the image.
+- **Generate (the Studio):** write a prompt, pick a size and quality, and add up to 4 reference image URLs. The price updates as you type: an estimate, and the most it can cost, for each quality. "How this price is made" shows every token type, its rate and the 25% fee.
+- **History:** every generation with its live status (waiting for a free slot, queued, generating, succeeded or failed), the estimated and the actual cost, and the image. The page refreshes the history every 2 seconds while something is running, and stops once everything is finished. A failed generation says why in plain words, shows "You were not charged", and has a Try again button.
+- **Detail page:** for each generation, the estimated, maximum and actual tokens of each type, the cost to 9 decimals, our fee, the charge, Pixelforge's id and the timestamps.
 - **Pay exactly once:** the actual cost is recorded when a generation finishes. Failed generations are free. A duplicate or late webhook can never charge twice.
 - **Admin report** _(stretch goal, pending)_: charges, provider costs and profit per day and per user, checked against Pixelforge's `GET /v1/usage`.
 - **Credit balances** _(stretch goal, pending)_: a fake "Buy credits" button, and generating is blocked when you can't afford the maximum price.
@@ -109,4 +108,8 @@ The choices the brief left open, and why, are in [docs/DECISIONS.md](docs/DECISI
 
 ## Known limits and next steps
 
-_(pending)_
+- **Images aren't stored here.** Pixelforge's image links expire after 24 hours; after that, the history shows a placeholder. Next step: copy each image to object storage when it succeeds.
+- **Live status is polling, not push.** The page asks every 2 seconds, only while something is running. WebSockets would update instantly, but on Laravel Cloud they cost money and keep the app awake.
+- **A poll answered "not found" or "invalid key" only logs an error.** The generation stays queued and the hourly reconcile tries again. Next step: flag it for an operator.
+- **Waiting for a free slot uses up the shared rate limit.** Each wait counts against our 50-requests-per-minute budget, even though it doesn't call Pixelforge.
+- **`completed_at` is a plain timestamp.** It's correct because the app runs in UTC; `timestamptz` would be safer if that ever changed.

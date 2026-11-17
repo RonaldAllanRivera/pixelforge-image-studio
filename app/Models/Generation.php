@@ -32,6 +32,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $estimated_charge_nano
  * @property int $max_cost_nano
  * @property int $max_charge_nano
+ * @property array{estimated: array<string, int>, maximum: array<string, int>}|null $quoted_usage Token counts behind the quote.
  * @property int|null $input_text_tokens
  * @property int|null $input_image_tokens
  * @property int|null $output_tokens
@@ -52,7 +53,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 #[Fillable([
     'idempotency_key', 'status', 'prompt', 'size', 'quality', 'reference_images',
-    'estimated_cost_nano', 'estimated_charge_nano', 'max_cost_nano', 'max_charge_nano',
+    'estimated_cost_nano', 'estimated_charge_nano', 'max_cost_nano', 'max_charge_nano', 'quoted_usage',
 ])]
 class Generation extends Model
 {
@@ -73,6 +74,7 @@ class Generation extends Model
             'quality' => ImageQuality::class,
             'reference_images' => 'array',
             'rates' => 'array',
+            'quoted_usage' => 'array',
             'estimated_cost_nano' => 'integer',
             'estimated_charge_nano' => 'integer',
             'max_cost_nano' => 'integer',
