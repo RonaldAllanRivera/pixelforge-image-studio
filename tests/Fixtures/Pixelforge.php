@@ -2,6 +2,8 @@
 
 namespace Tests\Fixtures;
 
+use App\Pixelforge\GenerationSnapshot;
+
 /**
  * Real Pixelforge responses, saved under tests/Fixtures/pixelforge.
  */
@@ -13,6 +15,16 @@ final class Pixelforge
     public static function load(string $name): array
     {
         return json_decode((string) file_get_contents(__DIR__."/pixelforge/{$name}.json"), true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * A generation snapshot read from a fixture, with some fields changed.
+     *
+     * @param  array<string, mixed>  $changes  Merged recursively, so ['usage' => ['reasoning_tokens' => 1]] changes one count.
+     */
+    public static function snapshot(string $name, array $changes = []): GenerationSnapshot
+    {
+        return GenerationSnapshot::fromArray(array_replace_recursive(self::load($name), $changes));
     }
 
     /**

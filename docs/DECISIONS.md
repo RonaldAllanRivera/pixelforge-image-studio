@@ -42,6 +42,18 @@ Estimates use Pixelforge's live `GET /v1/pricing`, kept for 10 minutes. If it ca
 
 Test fixtures are real responses captured with a local key: queued, succeeded and failed generations, every error body, and real webhook events. Signed image URLs are replaced with a stable example. Tests can't drift from what Pixelforge actually sends.
 
+## One place where status and money change
+
+The create response, polling and webhooks all report on the same generation, in any order and sometimes twice. They all go through `ApplyGenerationSnapshot`, which locks the generation's row and applies a report only if it moves the status forward (pending → queued → processing → succeeded or failed). A final status never changes again. So a duplicate webhook, a late `processing` event and a poll racing a webhook all end in the same state, and the cost is recorded once. HTTP calls happen before the transaction, never inside it, so the lock is held for milliseconds. Not chosen: deduplicating each path separately, which leaves the gaps between the paths open.
+
+## A charge never exceeds the quoted maximum
+
+The page promises the user they'll never pay more than the maximum shown before submitting. That can only be broken if Pixelforge changes its rates between our quote and the generation's creation. If it happens, the user pays the maximum and we absorb the difference (logged as a warning). The provider cost stays exact, so the admin report still matches Pixelforge.
+
+## A report about a different generation is ignored
+
+Once a generation is linked to a Pixelforge id, a report carrying another id is logged and ignored rather than applied. That guards against a lookup bug ever charging one generation for another.
+
 ## Sign-up and login only
 
 The starter kit's email verification, two-factor login and passkeys were left out. They don't serve this app, and email verification would lock out anyone testing a deployment without a mail service.

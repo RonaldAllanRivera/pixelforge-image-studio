@@ -2,6 +2,14 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Phase 3: Generations and the one place their status and money change (2026-11-17)
+
+### Added
+
+- The `generations` table and `Generation` model: the request, Pixelforge's id and rates, the estimated and maximum price, and, once finished, the exact tokens, cost and charge. All money in nanodollars.
+- `ApplyGenerationSnapshot`: every report about a generation (create response, poll or webhook) goes through it. It locks the row and only applies a report that moves the generation forward, so duplicate, late and out-of-order reports change nothing and a generation is charged exactly once. It bills at the rates fixed on the generation, records failures at no cost, never charges more than the quoted maximum, and ignores reports about a different Pixelforge generation.
+- `GenerationStatus::canMoveTo()`: pending → queued → processing → succeeded or failed, and never out of a final status.
+
 ## Phase 2: Pixelforge client (2026-11-17)
 
 ### Added
