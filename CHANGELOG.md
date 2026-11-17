@@ -2,6 +2,31 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Phase 9: Credit balances and the admin report (2026-11-17)
+
+Both stretch goals. Every account starts at $0.
+
+### Added
+
+- **Credit balances.** Each user has a balance in nanodollars (`users.balance_nano`), and every change to it is an entry in `credit_transactions`: purchase, hold, release or charge. One class, `CreditLedger`, writes them, each entry in the same transaction as its balance change.
+    - Submitting a generation **holds its maximum charge**, with the user's row locked. A balance that can't cover the maximum creates nothing (no row, no hold, no job) and the form says "Not enough credits. This image can cost up to … and your balance is …".
+    - When the generation ends, `ApplyGenerationSnapshot` **releases the hold** and, on success, **takes the actual charge**, in its existing locked transaction. A failure only releases. A duplicate webhook or a poll racing a webhook can't settle twice.
+    - The database refuses a negative balance (`CHECK`) and a second hold, release or charge for one generation (unique index).
+    - Generations made before balances settle without touching credits.
+- **Buy credits:** a dialog with $5, $10 and $25 (a pretend purchase, no payment), on the Studio and the Credits page. On the Studio it opens in place, so a typed prompt is kept. Limited to 10 purchases a minute.
+- **The balance on every page**, in the header, and under the price on the Studio. Generate is disabled and reads "Not enough credits" when the server says the chosen quality isn't affordable; a purchase or a finished image re-asks the server. Balances are shown rounded down; holds rounded up, like the maximum they hold.
+- **Credits page** (`/credits`): the balance (and its exact 9-decimal value), what's held for images in progress, and every entry, newest first, with the prompt it was for. The generation's detail page lists its own entries.
+- **Admin report** (`/admin/report`, admins only): what users were charged, Pixelforge's cost and the profit, per UTC day and per user, for any range of up to 92 days (the last 30 by default). Amounts show 9 decimals.
+    - Each day, and the whole range, is **checked against Pixelforge's `GET /v1/usage`**: generations, all four token counts and the cost must match to the nanodollar, or the differences are listed. Pixelforge's part loads after the page; if Pixelforge can't be reached, the report says so and still shows our numbers. The comparison is limited to 5 a minute across all admins, so the report can't use up the account's rate limit.
+    - Clicking a day narrows the report to it, showing who spent what that day. Emails are masked (`al•••@gmail.com`); a deleted account's generations show as "Deleted account".
+- `php artisan users:make-admin {email}` (and `--remove`) makes an existing account an admin.
+- **Browser tests** (Pest's browser plugin, Playwright, Chromium) for the Studio, buying credits, the balance after an image finishes, the Credits page and the admin report, at desktop and phone width. CI installs Chromium and runs them with the rest of the suite.
+
+### Changed
+
+- The Studio's 2-second status poll also reloads the balance.
+- Local seeded users start with $10 of credit.
+
 ## Phase 7: The Studio UI (2026-11-17)
 
 ### Added

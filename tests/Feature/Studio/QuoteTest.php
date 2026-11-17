@@ -1,5 +1,6 @@
 <?php
 
+use App\Credits\CreditLedger;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Tests\Fixtures\Pixelforge;
@@ -20,9 +21,9 @@ test('quotes every quality for a prompt, with a breakdown of the chosen one', fu
     $response->assertOk()
         ->assertJsonPath('characters', 9)
         ->assertJsonPath('qualities', [
-            'low' => ['estimated' => '$0.0179', 'maximum' => '$0.0219'],
-            'medium' => ['estimated' => '$0.0722', 'maximum' => '$0.0863'],
-            'high' => ['estimated' => '$0.2853', 'maximum' => '$0.3401'],
+            'low' => ['estimated' => '$0.0179', 'maximum' => '$0.0219', 'affordable' => false],
+            'medium' => ['estimated' => '$0.0722', 'maximum' => '$0.0863', 'affordable' => false],
+            'high' => ['estimated' => '$0.2853', 'maximum' => '$0.3401', 'affordable' => false],
         ])
         ->assertJsonPath('breakdown.estimated_charge', '$0.072206250')
         ->assertJsonPath('breakdown.maximum_fee', '$0.017255000')
@@ -68,6 +69,24 @@ test('refuses a fifth reference image', function () {
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('reference_images');
+});
+
+test('marks each quality affordable or not, compared on the server', function () {
+    $user = User::factory()->create();
+    (new CreditLedger)->purchase($user, 50_000_000);
+
+    // $user still says $0 in memory: the quote reads the balance as stored now.
+    $this->actingAs($user)->postJson(route('studio.quote'), [
+        'prompt' => 'A red fox',
+        'size' => '1024x1024',
+        'quality' => 'medium',
+        'reference_images' => [],
+    ])
+        ->assertOk()
+        ->assertJsonPath('balance', '$0.0500')
+        ->assertJsonPath('qualities.low.affordable', true)     // at most 21,837,500
+        ->assertJsonPath('qualities.medium.affordable', false) // at most 86,275,000
+        ->assertJsonPath('qualities.high.affordable', false);  // at most 340,025,000
 });
 
 test('is for signed-in users only', function () {

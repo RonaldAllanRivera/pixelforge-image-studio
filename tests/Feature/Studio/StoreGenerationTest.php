@@ -11,7 +11,7 @@ use Tests\Fixtures\Pixelforge;
 beforeEach(function () {
     Http::fake(['pixelforge.test/v1/pricing' => Http::response(Pixelforge::load('pricing'))]);
     Queue::fake();
-    $this->user = User::factory()->create();
+    $this->user = User::factory()->withCredits()->create();
 });
 
 /**
@@ -63,4 +63,11 @@ test('ignores blank reference image rows', function () {
     ]))->assertSessionHasNoErrors();
 
     expect(Generation::sole()->reference_images)->toBe(['https://example.com/a.png']);
+});
+
+test("shows a clear error when the balance can't cover the maximum", function () {
+    $this->actingAs(User::factory()->create())->post(route('generations.store'), generationForm())
+        ->assertSessionHasErrors(['credits' => 'Not enough credits. This image can cost up to $0.0863 and your balance is $0.0000.']);
+
+    expect(Generation::count())->toBe(0);
 });

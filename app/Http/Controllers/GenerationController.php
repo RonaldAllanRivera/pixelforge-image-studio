@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Actions\CreateGeneration;
+use App\Credits\InsufficientCredits;
 use App\Http\Requests\StoreGenerationRequest;
 use App\Http\Resources\GenerationDetailResource;
 use App\Models\Generation;
 use App\Models\User;
+use App\Support\Nanodollars;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
@@ -20,7 +22,14 @@ final class GenerationController extends Controller
      */
     public function store(StoreGenerationRequest $request, CreateGeneration $create, #[CurrentUser] User $user): RedirectResponse
     {
-        $create->handle($user, $request->prompt(), $request->imageSize(), $request->imageQuality(), $request->referenceImages());
+        try {
+            $create->handle($user, $request->prompt(), $request->imageSize(), $request->imageQuality(), $request->referenceImages());
+        } catch (InsufficientCredits $e) {
+            return back()->withErrors([
+                'credits' => 'Not enough credits. This image can cost up to '.Nanodollars::formatAtMost($e->neededNano)
+                    .' and your balance is '.Nanodollars::formatRoundedDown($e->balanceNano).'.',
+            ]);
+        }
 
         return to_route('studio');
     }

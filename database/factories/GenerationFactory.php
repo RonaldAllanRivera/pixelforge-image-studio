@@ -37,4 +37,23 @@ class GenerationFactory extends Factory
             'max_charge_nano' => 86_275_000,
         ];
     }
+
+    /**
+     * A generation Pixelforge finished at the given moment (UTC), with the figures of the real
+     * generation-succeeded fixture: the same one as Pixelforge's usage for 16 November.
+     */
+    public function succeeded(string $completedAt): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => GenerationStatus::Succeeded,
+            'provider_id' => 'gen_'.Str::ulid(),
+            'input_text_tokens' => 10,
+            'input_image_tokens' => 0,
+            'output_tokens' => 280,
+            'reasoning_tokens' => 480,
+            'provider_cost_nano' => 17_250_000,
+            'charge_nano' => 21_562_500,
+            'completed_at' => $completedAt,
+        ]);
+    }
 }

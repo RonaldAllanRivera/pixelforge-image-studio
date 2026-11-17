@@ -99,3 +99,43 @@ The webhook route is loaded outside the `web` middleware group: no session, cook
 ## Sign-up and login only
 
 The starter kit's email verification, two-factor login and passkeys were left out. They don't serve this app, and email verification would lock out anyone testing a deployment without a mail service.
+
+## Credits are held at the maximum, and settled where status changes
+
+Submitting a generation holds its maximum charge from the user's balance, inside the same transaction that creates it, with the user's row locked. When the generation becomes final, `ApplyGenerationSnapshot` releases the hold and, on success, takes the actual charge, in the same locked transaction that records the status and cost. So several images running at once can never spend more than the user has, and money still changes in one place. A generation made before balances existed has no hold, and settles without touching credits.
+
+## A balance column, an append-only ledger, and two database guards
+
+`users.balance_nano` is the available balance, so checking "can they afford it" is one locked row, not a sum. Every change to it is also an entry in `credit_transactions` (purchase, hold, release, charge), written by one class (`CreditLedger`) in the same transaction, so a balance always equals the sum of its entries and every cent is explained. The database refuses a negative balance (a `CHECK` constraint) and a second hold, release or charge for one generation (a unique index on `generation_id, type`), whatever the code does.
+
+## The server decides whether you can afford it
+
+The quote endpoint says, for each quality, whether the balance covers the maximum, compared in whole nanodollars on the server. The form only disables Generate and says "Not enough credits"; `CreateGeneration` checks again under the lock, and that check is the rule. The balance is one of the price's inputs, so a purchase or a settled image re-asks the server without the user touching the form.
+
+## Balances round down, holds round up
+
+A balance is shown to 4 decimals rounded down (`Nanodollars::formatRoundedDown()`), so the page never shows more than the user has. Rounding half up could show "$0.0220" for a balance of $0.021975 next to a maximum of "$0.0220", and then refuse. A hold and its release are the generation's maximum, so they're shown rounded up (`formatAtMost()`), exactly like the "never more than" the user was quoted: one amount never appears as two different figures. The Credits page also shows the exact 9-decimal balance, and each entry's exact amount on hover.
+
+## Deleting an account while an image settles
+
+`CreateGeneration` locks the user, then writes a new generation; settling locks an existing generation, then updates the user. Deleting an account takes the locks in the opposite order (the user, then their generations and ledger rows), so if someone deletes their account at the very moment one of their images settles, Postgres detects a deadlock and aborts one of the two. Both outcomes are safe: an aborted webhook gets a 500 and Pixelforge retries it, and an aborted delete shows an error and can be tried again.
+
+## The report counts days the way Pixelforge does
+
+The admin report groups our **succeeded** generations by the UTC day of Pixelforge's own `completed_at`, because that's how `GET /v1/usage` counts them (checked live: failed generations aren't counted there). Each day is compared on the number of generations, all four token counts and the cost, to the nanodollar, and anything that differs is listed in plain words. Days with nothing are listed with zeros on both sides, as Pixelforge does.
+
+## Emails are masked on the report
+
+The demo admin login will be public in this README, so anyone could open the report. It shows each user's name and a masked email (`al•••@gmail.com`): enough to tell accounts apart, not enough to contact anyone.
+
+## Pixelforge's usage is fetched live, not saved
+
+The report asks `GET /v1/usage` for exactly the range on screen, once per page load, as a deferred prop: our numbers show at once, Pixelforge's a moment later. If Pixelforge can't be reached or answers something unexpected, the report says so and still shows our numbers. Nothing is cached or scheduled, so a reload always compares fresh, and no extra scheduled task wakes the app. The comparison is limited to 5 a minute across all admins: Pixelforge allows 60 requests a minute per account and the jobs use up to 50, so a public demo admin reloading the report can never hold up anyone's images.
+
+## Why `GET /v1/generations` isn't used to reconcile
+
+Checked live, it lists generations from every API key on the account, not just ours. The local and production keys share an account, so it can't tell whether a generation belongs to this app. `GET /v1/usage` is per key, which is what the report needs.
+
+## Browser tests
+
+The screens are tested in a real Chromium with Pest's browser plugin (Playwright), written before the screens: a new account at $0 is blocked, buying $5 in the dialog keeps the typed prompt and turns Generate on, the balance drops by the actual charge when an image finishes, and the admin report shows each day checked against a faked `/v1/usage`. They run in-process against the test database, with Pixelforge faked like every other test, and at phone width too.

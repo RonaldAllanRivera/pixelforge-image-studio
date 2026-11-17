@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\GenerationStatus;
+use App\Models\CreditTransaction;
 use App\Models\Generation;
 use App\Pricing\TokenRates;
 use App\Support\Nanodollars;
@@ -27,6 +28,10 @@ class GenerationDetailResource extends GenerationResource
             'submit_attempts' => $generation->submit_attempts,
             'tokens' => $this->tokens($generation),
             'totals' => $this->totals($generation),
+            // Held, released and charged, oldest first. Empty for generations made before balances.
+            'credits' => $generation->creditTransactions()->orderBy('id')->get()
+                ->map(fn (CreditTransaction $entry) => CreditTransactionResource::amounts($entry))
+                ->all(),
         ];
     }
 

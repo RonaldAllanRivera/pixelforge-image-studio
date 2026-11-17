@@ -2,6 +2,8 @@
 
 namespace App\Actions;
 
+use App\Credits\CreditLedger;
+use App\Credits\InsufficientCredits;
 use App\Enums\GenerationStatus;
 use App\Enums\ImageQuality;
 use App\Enums\ImageSize;
@@ -14,18 +16,22 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Saves a user's new generation with its price quote, then sends it to Pixelforge in the
- * background. The user sees it in their history at once, as pending.
+ * Saves a user's new generation with its price quote, holds its maximum charge from their
+ * balance, then sends it to Pixelforge in the background. The user sees it in their history
+ * at once, as pending. A balance that can't cover the maximum creates nothing.
  */
 final readonly class CreateGeneration
 {
     public function __construct(
         private CurrentPrices $prices,
         private PricingCalculator $calculator,
+        private CreditLedger $ledger,
     ) {}
 
     /**
      * @param  list<string>  $referenceImages
+     *
+     * @throws InsufficientCredits
      */
     public function handle(User $user, string $prompt, ImageSize $size, ImageQuality $quality, array $referenceImages): Generation
     {
@@ -33,7 +39,15 @@ final readonly class CreateGeneration
         $quote = $this->calculator->quote($prompt, $size, $quality, count($referenceImages), $this->prices->sheet());
 
         return DB::transaction(function () use ($user, $prompt, $size, $quality, $referenceImages, $quote): Generation {
-            $generation = $user->generations()->create([
+            // Locked, so two quick submits can't both spend the same credit: the second waits
+            // here for the first to commit, then sees the lower balance.
+            $locked = User::query()->lockForUpdate()->findOrFail($user->id);
+
+            if ($locked->balance_nano < $quote->maximumCharge) {
+                throw new InsufficientCredits($quote->maximumCharge, $locked->balance_nano);
+            }
+
+            $generation = $locked->generations()->create([
                 // Sent with every attempt, so retries can never create a second generation.
                 'idempotency_key' => (string) Str::uuid(),
                 'status' => GenerationStatus::Pending,
@@ -50,6 +64,9 @@ final readonly class CreateGeneration
                     'maximum' => $quote->maximumUsage->toArray(),
                 ],
             ]);
+
+            // The most it can cost leaves the balance now, and comes back when it settles.
+            $this->ledger->hold($locked, $generation);
 
             // After the commit, so the worker can never start before the row exists.
             SubmitGeneration::dispatch($generation)->afterCommit();

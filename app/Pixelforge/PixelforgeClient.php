@@ -5,6 +5,7 @@ namespace App\Pixelforge;
 use App\Pixelforge\Exceptions\ConcurrencyLimited;
 use App\Pixelforge\Exceptions\ContentPolicyViolation;
 use App\Pixelforge\Exceptions\DailyLimitReached;
+use App\Pixelforge\Exceptions\DateRangeTooLong;
 use App\Pixelforge\Exceptions\IdempotencyKeyReused;
 use App\Pixelforge\Exceptions\InvalidApiKey;
 use App\Pixelforge\Exceptions\NotFound;
@@ -15,6 +16,7 @@ use App\Pixelforge\Exceptions\RateLimited;
 use App\Pixelforge\Exceptions\Rejected;
 use App\Pixelforge\Exceptions\ValidationFailed;
 use App\Pricing\PriceSheet;
+use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Container\Attributes\Config;
 use Illuminate\Http\Client\ConnectionException;
@@ -90,6 +92,21 @@ final readonly class PixelforgeClient
         return $body;
     }
 
+    /**
+     * What Pixelforge counted for our key, per UTC day, both dates included.
+     *
+     * @throws PixelforgeException
+     */
+    public function usage(CarbonImmutable $start, CarbonImmutable $end): UsageReport
+    {
+        $body = $this->send(fn () => $this->authenticated()->get('usage', [
+            'start_date' => $start->format('Y-m-d'),
+            'end_date' => $end->format('Y-m-d'),
+        ]))->json();
+
+        return UsageReport::fromArray(is_array($body) ? $body : []);
+    }
+
     private function request(): PendingRequest
     {
         return Http::baseUrl($this->baseUrl)
@@ -153,6 +170,7 @@ final readonly class PixelforgeClient
             'invalid_api_key' => new InvalidApiKey($message, $code),
             'not_found' => new NotFound($message, $code),
             'idempotency_key_reused' => new IdempotencyKeyReused($message, $code),
+            'date_range_too_long' => new DateRangeTooLong($message, $code),
             'validation_failed' => new ValidationFailed($message, $this->validationErrors($response)),
             default => $this->unknownFailure($response, $message, $code),
         };

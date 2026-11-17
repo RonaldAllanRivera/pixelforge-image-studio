@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, Sparkles } from '@lucide/vue';
+import { Link, usePage } from '@inertiajs/vue3';
+import {
+    BookOpen,
+    ChartColumn,
+    FolderGit2,
+    Sparkles,
+    Wallet,
+} from '@lucide/vue';
+import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
@@ -15,15 +22,28 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { studio } from '@/routes';
+import { report } from '@/routes/admin';
+import { index as credits } from '@/routes/credits';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
+const page = usePage();
+
+const mainNavItems = computed<NavItem[]>(() => [
     {
         title: 'Studio',
         href: studio(),
         icon: Sparkles,
     },
-];
+    {
+        title: 'Credits',
+        href: credits(),
+        icon: Wallet,
+    },
+    // Operators only. The server checks too: anyone else gets a 403.
+    ...(page.props.auth.user?.is_admin
+        ? [{ title: 'Admin report', href: report(), icon: ChartColumn }]
+        : []),
+]);
 
 const footerNavItems: NavItem[] = [
     {

@@ -8,7 +8,7 @@ A Laravel, Vue and Inertia app where signed-in users generate images through the
 
 ## Live app
 
-- URL: https://pixelforge-image-studio-production-jvfb2a.laravel.cloud
+- URL: https://pixelforge.allanai.dev
 - Logins: anyone can sign up as a normal user. A demo admin account for the usage report is listed here once deployed. The admin role can only read reports.
 
 ## What it does
@@ -17,8 +17,8 @@ A Laravel, Vue and Inertia app where signed-in users generate images through the
 - **History:** every generation with its live status (waiting for a free slot, queued, generating, succeeded or failed), the estimated and the actual cost, and the image. The page refreshes the history every 2 seconds while something is running, and stops once everything is finished. A failed generation says why in plain words, shows "You were not charged", and has a Try again button.
 - **Detail page:** for each generation, the estimated, maximum and actual tokens of each type, the cost to 9 decimals, our fee, the charge, Pixelforge's id and the timestamps.
 - **Pay exactly once:** the actual cost is recorded when a generation finishes. Failed generations are free. A duplicate or late webhook can never charge twice.
-- **Admin report** _(stretch goal, pending)_: charges, provider costs and profit per day and per user, checked against Pixelforge's `GET /v1/usage`.
-- **Credit balances** _(stretch goal, pending)_: a fake "Buy credits" button, and generating is blocked when you can't afford the maximum price.
+- **Credit balances:** every account starts at $0. "Buy credits" adds $5, $10 or $25 (a pretend purchase, no payment). Generate is blocked, with a clear message, when the balance can't cover the most an image can cost. The balance shows on every page, and the Credits page lists every purchase, hold, release and charge.
+- **Admin report** (admins only): what users were charged, what Pixelforge charged us and the profit, per UTC day and per user. Each day is checked against Pixelforge's own `GET /v1/usage` to the nanodollar, and any difference is listed.
 
 ## Stack
 
@@ -46,6 +46,8 @@ Characters are counted as Unicode code points on the server (`mb_strlen`), the w
 
 **Failed generations cost nothing**, including those rejected before Pixelforge accepted them.
 
+**Credits.** Each user has a balance, stored in nanodollars, and every change to it is an entry in a ledger: a purchase, a hold, a release or a charge. Submitting a generation **holds its maximum** from the balance, with the user's row locked, so several images at once can never spend more than you have; a balance that can't cover the maximum creates nothing. When the generation ends, the same locked transaction that records its cost **releases the hold** and, if it succeeded, **takes the actual charge**. A failure only releases it. The database itself refuses a negative balance and a second charge for one generation, and a balance always equals the sum of its entries. Balances are shown rounded down, so the page never shows more than you have, and a hold is shown rounded up, exactly as its "never more than" was quoted.
+
 ## How failures are handled
 
 | Pixelforge does this                   | The app does this                                                                                              | The user sees                                                          |
@@ -69,13 +71,13 @@ Characters are counted as Unicode code points on the server (`mb_strlen`), the w
 
 ## Running locally
 
-You need PHP 8.3+ (with `pdo_pgsql`), Composer, Node 22+, Docker, and a Pixelforge API key **for local use only**. Each key has its own webhook URL, secret and usage report.
+You need PHP 8.3+ (with `pdo_pgsql` and `sockets`; `composer install` needs `sockets` for the browser tests' package), Composer, Node 22+, Docker, and a Pixelforge API key **for local use only**. Each key has its own webhook URL, secret and usage report.
 
 ```bash
 cp .env.example .env          # then set PIXELFORGE_API_KEY and PIXELFORGE_WEBHOOK_SECRET
 docker compose up -d          # Postgres, with a separate pixelforge_testing database for tests
 composer setup                # installs dependencies, generates the app key, migrates, builds assets
-php artisan db:seed           # test@example.com and admin@example.com, both with password "password"
+php artisan db:seed           # test@example.com and admin@example.com, password "password", $10 of credit each
 composer run dev              # app on http://localhost:8000, plus the queue worker and Vite
 ```
 
@@ -100,6 +102,16 @@ composer ci:check      # everything CI runs: formatting, types, Pint, PHPStan an
 
 Tests never call Pixelforge: `phpunit.xml` replaces the real key and webhook secret with fake ones.
 
+The browser tests (`tests/Browser`) drive a real Chromium through Pest's browser plugin. Besides PHP's `sockets` extension (see above), they need the browser and built assets once:
+
+```bash
+npx playwright install chromium
+npm run build
+php artisan test      # runs the browser tests with the rest
+```
+
+To make an existing account an admin (for the report): `php artisan users:make-admin you@example.com` (`--remove` to undo).
+
 Prompt keywords force Pixelforge's behaviour, so every path can be tried by hand: `[fail]`, `[slow]`, `[duplicate]`, `[blocked]`, `[overloaded]` and `[succeed]`.
 
 ## Decisions
@@ -112,4 +124,6 @@ The choices the brief left open, and why, are in [docs/DECISIONS.md](docs/DECISI
 - **Live status is polling, not push.** The page asks every 2 seconds, only while something is running. WebSockets would update instantly, but on Laravel Cloud they cost money and keep the app awake.
 - **A poll answered "not found" or "invalid key" only logs an error.** The generation stays queued and the hourly reconcile tries again. Next step: flag it for an operator.
 - **Waiting for a free slot uses up the shared rate limit.** Each wait counts against our 50-requests-per-minute budget, even though it doesn't call Pixelforge.
+- **A generation that never finishes keeps its hold.** For example one left pending after a `409` for a person to check. The Credits page shows it as held.
+- **The admin report is effectively public** once the demo admin login is in this README. Emails are masked; names and amounts are not.
 - **`completed_at` is a plain timestamp.** It's correct because the app runs in UTC; `timestamptz` would be safer if that ever changed.

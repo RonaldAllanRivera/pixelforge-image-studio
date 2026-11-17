@@ -6,6 +6,7 @@ use App\Enums\ImageSize;
 use App\Pixelforge\Exceptions\ConcurrencyLimited;
 use App\Pixelforge\Exceptions\ContentPolicyViolation;
 use App\Pixelforge\Exceptions\DailyLimitReached;
+use App\Pixelforge\Exceptions\DateRangeTooLong;
 use App\Pixelforge\Exceptions\IdempotencyKeyReused;
 use App\Pixelforge\Exceptions\InvalidApiKey;
 use App\Pixelforge\Exceptions\NotFound;
@@ -18,6 +19,7 @@ use App\Pixelforge\Exceptions\RetryLater;
 use App\Pixelforge\Exceptions\ValidationFailed;
 use App\Pixelforge\NewGeneration;
 use App\Pixelforge\PixelforgeClient;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -170,6 +172,31 @@ test('reports an unknown outcome when it cannot tell whether Pixelforge created 
     'success without a generation' => [fn () => Http::response(['hello' => 'world'], 202)],
     'request timeout (408)' => [fn () => Http::response('', 408)],
 ]);
+
+test('fetches usage for a date range', function () {
+    Http::fake(['pixelforge.test/v1/usage*' => Http::response(Pixelforge::load('usage'))]);
+
+    $report = $this->client->usage(CarbonImmutable::parse('2026-11-16'), CarbonImmutable::parse('2026-11-18'));
+
+    expect($report->day('2026-11-16')->costNano)->toBe(17_250_000);
+    Http::assertSent(fn (Request $request) => $request->method() === 'GET'
+        && $request->url() === 'https://pixelforge.test/v1/usage?start_date=2026-11-16&end_date=2026-11-18'
+        && $request->hasHeader('Authorization', 'Bearer pf_test_key'));
+});
+
+test('turns a range that is too long into DateRangeTooLong', function () {
+    Http::fake(['pixelforge.test/v1/usage*' => Http::response(Pixelforge::error('invalid_request_error', 'date_range_too_long'), 422)]);
+
+    expect(fn () => $this->client->usage(CarbonImmutable::parse('2026-01-01'), CarbonImmutable::parse('2026-11-18')))
+        ->toThrow(DateRangeTooLong::class);
+});
+
+test("turns a usage answer it can't read into OutcomeUnknown", function () {
+    Http::fake(['pixelforge.test/v1/usage*' => Http::response(['object' => 'usage'])]);
+
+    expect(fn () => $this->client->usage(CarbonImmutable::parse('2026-11-16'), CarbonImmutable::parse('2026-11-18')))
+        ->toThrow(OutcomeUnknown::class);
+});
 
 test('never puts the API key or the response body in an error message', function () {
     Http::fake(['pixelforge.test/*' => Http::response('Echo: Authorization: Bearer pf_test_key', 500)]);

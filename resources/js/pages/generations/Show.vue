@@ -196,6 +196,21 @@ function count(tokens: number | null): string {
             </dl>
         </section>
 
+        <section v-if="generation.credits.length > 0" class="space-y-3">
+            <h2 class="font-medium">Credits</h2>
+            <dl class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm tabular-nums">
+                <template
+                    v-for="(line, index) in generation.credits"
+                    :key="index"
+                >
+                    <dt class="text-muted-foreground">{{ line.label }}</dt>
+                    <dd class="text-right" :title="line.amount_exact">
+                        {{ line.amount }}
+                    </dd>
+                </template>
+            </dl>
+        </section>
+
         <section class="space-y-3">
             <h2 class="font-medium">Details</h2>
             <dl class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">

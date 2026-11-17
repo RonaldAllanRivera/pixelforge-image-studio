@@ -27,13 +27,13 @@ defineOptions({
     },
 });
 
-// Live status: reload only the history every 2 seconds, and only while something on
-// this page is still running. Once everything is final (or stalled, with no job working on
-// it), polling stops and the app can sleep. "rest" waits for each answer before the next
-// poll, so answers can't arrive out of order; a hidden tab pauses.
+// Live status: reload only the history and the balance every 2 seconds, and only while
+// something on this page is still running. Once everything is final (or stalled, with no
+// job working on it), polling stops and the app can sleep. "rest" waits for each answer
+// before the next poll, so answers can't arrive out of order; a hidden tab pauses.
 const { start, stop } = usePoll(
     2000,
-    { only: ['generations'] },
+    { only: ['generations', 'credits'] },
     { autoStart: false, mode: 'rest', background: 'pause' },
 );
 const hasRunning = computed(() =>

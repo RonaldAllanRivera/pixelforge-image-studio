@@ -37,6 +37,13 @@ test('formats a maximum rounding up, so "never more than" is never below the rea
         ->and(Nanodollars::formatAtMost(340_025_000, 9))->toBe('$0.340025000');
 });
 
+test('formats a balance rounding down, so it never shows more than there is', function () {
+    expect(Nanodollars::formatRoundedDown(21_975_000))->toBe('$0.0219')
+        ->and(Nanodollars::format(21_975_000))->toBe('$0.0220')
+        ->and(Nanodollars::formatRoundedDown(9_931_968_750, 2))->toBe('$9.93')
+        ->and(Nanodollars::formatRoundedDown(0))->toBe('$0.0000');
+});
+
 test('adds the markup exactly when the cost divides evenly', function () {
     // The live test generation on 2026-11-17: 10 text, 280 output and 480 reasoning tokens.
     expect(Nanodollars::addMarkup(17_250_000, 25))->toBe(21_562_500);

@@ -1,0 +1,42 @@
+{
+    "object": "usage",
+    "start_date": "2026-11-16",
+    "end_date": "2026-11-18",
+    "data": [
+        {
+            "date": "2026-11-16",
+            "generations": 1,
+            "input_text_tokens": 10,
+            "input_image_tokens": 0,
+            "output_tokens": 280,
+            "reasoning_tokens": 480,
+            "cost_usd": "0.017250000"
+        },
+        {
+            "date": "2026-11-17",
+            "generations": 4,
+            "input_text_tokens": 50,
+            "input_image_tokens": 2295,
+            "output_tokens": 3310,
+            "reasoning_tokens": 2116,
+            "cost_usd": "0.182050000"
+        },
+        {
+            "date": "2026-11-18",
+            "generations": 0,
+            "input_text_tokens": 0,
+            "input_image_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "cost_usd": "0.000000000"
+        }
+    ],
+    "total": {
+        "generations": 5,
+        "input_text_tokens": 60,
+        "input_image_tokens": 2295,
+        "output_tokens": 3590,
+        "reasoning_tokens": 2596,
+        "cost_usd": "0.199300000"
+    }
+}

@@ -1,6 +1,8 @@
 // Shapes the server sends (see app/Http/Resources and QuoteController).
 // Every amount is a formatted string: the browser never does money math.
 
+import type { CreditLine } from './credits';
+
 export type GenerationStatus =
     | 'pending'
     | 'queued'
@@ -46,6 +48,8 @@ export type GenerationDetail = Generation & {
     submit_attempts: number;
     tokens: TokenRow[];
     totals: { provider_cost: string; fee: string; charge: string } | null;
+    // Held, released and charged, oldest first. Empty for generations made before balances.
+    credits: CreditLine[];
 };
 
 export type Option = { value: string; label: string };
@@ -58,7 +62,13 @@ export type StudioLimits = {
 
 export type Quote = {
     characters: number;
-    qualities: Record<string, { estimated: string; maximum: string }>;
+    // The user's balance, rounded down.
+    balance: string;
+    // affordable: the balance covers the maximum. Decided on the server.
+    qualities: Record<
+        string,
+        { estimated: string; maximum: string; affordable: boolean }
+    >;
     breakdown: {
         rows: {
             label: string;

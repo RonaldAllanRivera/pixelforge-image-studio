@@ -15,13 +15,13 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Local development only. Both passwords are "password".
-        User::factory()->create([
+        // Local development only. Both passwords are "password". Each starts with $10 of credit.
+        User::factory()->withCredits(10)->create([
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
 
-        User::factory()->admin()->create([
+        User::factory()->admin()->withCredits(10)->create([
             'name' => 'Admin',
             'email' => 'admin@example.com',
         ]);

@@ -47,7 +47,8 @@ jobs:
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: '8.3'
-          extensions: pdo_pgsql, bcmath
+          # sockets: Pest's browser plugin serves the app to Chromium in-process.
+          extensions: pdo_pgsql, bcmath, sockets
           tools: composer:v2
           coverage: none
 
@@ -60,6 +61,10 @@ jobs:
       # and the deploy's `npm ci` then fails. `npm ci` here fails first.
       - name: Check the lock file installs on Linux
         run: npm ci --no-audit --no-fund
+
+      # The browser tests (tests/Browser) drive a real Chromium through Playwright.
+      - name: Install Chromium for the browser tests
+        run: npx playwright install --with-deps chromium
 
       - name: Setup Application
         run: composer setup

@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Credits\CreditLedger;
 use App\Enums\GenerationStatus;
 use App\Models\Generation;
 use App\Pixelforge\GenerationSnapshot;
@@ -18,11 +19,15 @@ use InvalidArgumentException;
  * webhook. Each runs in a transaction that locks the generation's row, and a report is only
  * applied if it moves the generation forward. Duplicate, late and out-of-order reports change
  * nothing, so every path ends in the same state, charged exactly once.
+ *
+ * The user's credits settle here too, in the same transaction, at the one moment a generation
+ * becomes final: its hold is released and, on success, the actual charge taken.
  */
 final readonly class ApplyGenerationSnapshot
 {
     public function __construct(
         private PricingCalculator $calculator,
+        private CreditLedger $ledger,
     ) {}
 
     /**
@@ -66,6 +71,11 @@ final readonly class ApplyGenerationSnapshot
 
             $locked->save();
 
+            // Reached once: a final status can't move again, so a later report returns above.
+            if ($locked->status->isFinal()) {
+                $this->ledger->settle($locked);
+            }
+
             return $locked;
         });
     }
@@ -86,6 +96,7 @@ final readonly class ApplyGenerationSnapshot
             $locked->status = GenerationStatus::Failed;
             $this->recordFailure($locked, $errorCode, $errorMessage);
             $locked->save();
+            $this->ledger->settle($locked);
 
             return $locked;
         });

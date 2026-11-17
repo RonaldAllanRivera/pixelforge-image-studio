@@ -7,10 +7,11 @@ import {
     Square,
     X,
 } from '@lucide/vue';
-import { useForm, useHttp } from '@inertiajs/vue3';
+import { useForm, useHttp, usePage } from '@inertiajs/vue3';
 import { watchDebounced } from '@vueuse/core';
 import type { Component } from 'vue';
 import { computed, onMounted, ref, watch } from 'vue';
+import BuyCreditsDialog from '@/components/credits/BuyCreditsDialog.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -68,14 +69,21 @@ const quoteRequest = useHttp<
     Quote
 >(quote(), { prompt: '', size: '', quality: '', reference_images: [] });
 
+// The balance, shared with every page. A purchase or a settled image changes it.
+const page = usePage();
+const credits = computed(() => page.props.credits);
+
 // The inputs that change the price. The price on screen is current only when it was
 // worked out for exactly these; otherwise it's dimmed and Generate waits for the new one.
+// The balance is one of them: the server says whether it covers each maximum, so a
+// purchase or a settled image re-asks without the user touching the form.
 const priceInputs = computed(() =>
     JSON.stringify([
         form.prompt,
         form.size,
         form.quality,
         filledReferences.value.length,
+        credits.value?.balance,
     ]),
 );
 const pricedFor = ref<string | null>(null);
@@ -85,6 +93,16 @@ const priceIsCurrent = computed(
         price.value !== null &&
         priceProblem.value === null &&
         pricedFor.value === priceInputs.value,
+);
+
+// The server's answer for the chosen quality. It checks again when the form is sent.
+const cannotAfford = computed(
+    () =>
+        priceIsCurrent.value &&
+        price.value?.qualities[form.quality]?.affordable === false,
+);
+const creditsError = computed(
+    () => (form.errors as Record<string, string | undefined>).credits,
 );
 
 function refreshPrice(): void {
@@ -187,6 +205,7 @@ function submit(): void {
             </div>
             <textarea
                 id="prompt"
+                data-test="prompt"
                 v-model="form.prompt"
                 rows="4"
                 placeholder="A red fox in the snow, watercolor"
@@ -339,6 +358,16 @@ function submit(): void {
                 You pay the actual cost plus 25%, never more than the maximum.
                 Failed generations are free.
             </p>
+            <div
+                v-if="credits"
+                class="flex flex-wrap items-center justify-between gap-2 border-t pt-3"
+            >
+                <p class="text-sm" data-test="balance">
+                    Balance
+                    <strong class="tabular-nums">{{ credits.balance }}</strong>
+                </p>
+                <BuyCreditsDialog />
+            </div>
 
             <Collapsible v-if="price">
                 <CollapsibleTrigger
@@ -430,13 +459,23 @@ function submit(): void {
             </Collapsible>
         </div>
 
-        <Button
-            type="submit"
-            class="w-full sm:w-auto"
-            :disabled="form.processing || !priceIsCurrent"
-        >
-            <Spinner v-if="form.processing" />
-            Generate
-        </Button>
+        <div class="space-y-2">
+            <Button
+                type="submit"
+                data-test="generate"
+                class="w-full sm:w-auto"
+                :disabled="form.processing || !priceIsCurrent || cannotAfford"
+            >
+                <Spinner v-if="form.processing" />
+                {{ cannotAfford ? 'Not enough credits' : 'Generate' }}
+            </Button>
+            <p
+                v-if="creditsError"
+                data-test="credits-error"
+                class="text-sm text-red-600 dark:text-red-500"
+            >
+                {{ creditsError }}
+            </p>
+        </div>
     </form>
 </template>

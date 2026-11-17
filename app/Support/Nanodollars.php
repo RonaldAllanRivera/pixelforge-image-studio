@@ -59,6 +59,17 @@ final class Nanodollars
     }
 
     /**
+     * Format a balance, rounding down, so the page never shows more than the user has.
+     * Display only: never store it.
+     *
+     * @param  int<0, 9>  $decimals
+     */
+    public static function formatRoundedDown(int $nanodollars, int $decimals = 4): string
+    {
+        return '$'.BigDecimal::ofUnscaledValue($nanodollars, self::DECIMALS)->toScale($decimals, RoundingMode::Down);
+    }
+
+    /**
      * Add a percentage markup, rounded up to the next whole nanodollar so rounding never
      * loses money. This is the only rounding of money in the app.
      */
