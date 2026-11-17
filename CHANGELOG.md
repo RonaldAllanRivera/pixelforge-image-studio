@@ -2,6 +2,16 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Phase 2: Pixelforge client (2026-11-17)
+
+### Added
+
+- `PixelforgeClient`: the only code that talks HTTP to Pixelforge. It creates a generation with an `Idempotency-Key`, fetches a generation, and reads the price sheet. Each request is sent once; retrying is the caller's decision.
+- Typed exceptions for every documented error code, in three families that say what to do next: `RetryLater` (rate limit, concurrency limit, overloaded, each with how long to wait), `Rejected` (nothing was created: content policy, daily limit, validation, invalid key, not found, idempotency key reused, and unknown 4xx codes) and `OutcomeUnknown` (timeouts, server errors, unreadable answers: the generation may exist, so it is never marked failed).
+- `GenerationSnapshot`: one reader for the generation object, whether it comes from creating, fetching or a webhook.
+- `CurrentPrices`: live pricing for estimates, kept for 10 minutes, falling back to the published prices when Pixelforge can't be reached.
+- Test fixtures captured from the real API: queued, succeeded and failed generations, every error body, and real `processing`, `succeeded` and `failed` webhook events.
+
 ## Phase 1: Money (2026-11-17)
 
 ### Added

@@ -1,0 +1,33 @@
+{
+    "id": "evt_01M7KE19V7DXCJRP5HBSBSDGVX",
+    "object": "event",
+    "type": "generation.processing",
+    "created_at": "2026-11-17T00:20:45Z",
+    "data": {
+        "object": {
+            "id": "gen_01M7KE16V4095Y7FRGB0NW8ZC4",
+            "object": "generation",
+            "status": "processing",
+            "prompt": "Fixture capture: a lighthouse at dusk [succeed]",
+            "size": "1536x1024",
+            "quality": "medium",
+            "reference_images": ["https://example.com/reference-1.png"],
+            "metadata": {
+                "purpose": "fixture-capture"
+            },
+            "image_url": null,
+            "image_url_expires_at": null,
+            "usage": null,
+            "rates": {
+                "input_text_tokens": "5.00",
+                "input_image_tokens": "10.00",
+                "output_tokens": "40.00",
+                "reasoning_tokens": "12.50"
+            },
+            "error": null,
+            "created_at": "2026-11-17T00:20:41Z",
+            "started_at": "2026-11-17T00:20:45Z",
+            "completed_at": null
+        }
+    }
+}

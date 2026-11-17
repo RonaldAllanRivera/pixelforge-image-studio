@@ -1,6 +1,6 @@
 # Decisions
 
-The brief leaves some things open on purpose. These are the choices made, why, and what was rejected. Newest at the bottom.
+The brief leaves some things open on purpose. These are the choices made, why, and what wasn't chosen.
 
 ## Money is stored as whole nanodollars
 
@@ -25,6 +25,22 @@ Prompt length is counted with `mb_strlen`, so an emoji counts as one character, 
 ## Tests run on Postgres
 
 Tests use a separate `pixelforge_testing` Postgres database, the same engine as production, because the money code relies on Postgres row locks and unique indexes that SQLite doesn't behave the same way with. Any HTTP call in a test must be faked, so the suite can never reach Pixelforge.
+
+## Errors are grouped by what to do next
+
+The client turns every Pixelforge error into a typed exception, chosen by `error.code` rather than the HTTP status, because a 429 can mean "wait a second" (rate limit), "wait for a free slot" (concurrency) or "come back tomorrow" (daily limit). Each one belongs to a family the caller acts on: `RetryLater`, `Rejected` or `OutcomeUnknown`. Not chosen: a single generic error type, which would push the "can I retry?" question into every caller.
+
+## An unknown outcome is never a failure
+
+A timeout, a 5xx or an unreadable answer doesn't tell us whether Pixelforge created the generation. If we marked it failed, Pixelforge could still create and bill it while we charged the user nothing. So it stays pending and is retried with the same `Idempotency-Key`, which returns the existing generation if there is one. The request body is built only from stored fields, so a retry is byte-identical, as Pixelforge requires.
+
+## Live prices for estimates, with a fallback
+
+Estimates use Pixelforge's live `GET /v1/pricing`, kept for 10 minutes. If it can't be fetched, the published prices in `config/pixelforge.php` are used for a minute before trying again, so the estimate never hangs on a dead connection. This only affects estimates: a generation is always billed at the rates Pixelforge fixes on the generation itself.
+
+## Fixtures come from the real API
+
+Test fixtures are real responses captured with a local key: queued, succeeded and failed generations, every error body, and real webhook events. Signed image URLs are replaced with a stable example. Tests can't drift from what Pixelforge actually sends.
 
 ## Sign-up and login only
 
