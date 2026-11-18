@@ -22,4 +22,12 @@ class PasswordUpdateRequest extends FormRequest
             'password' => $this->passwordRules(),
         ];
     }
+
+    /**
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [new KeepDemoAccountUnchanged($this->user(), 'current_password')];
+    }
 }

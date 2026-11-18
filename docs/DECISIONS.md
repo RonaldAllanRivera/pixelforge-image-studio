@@ -104,7 +104,7 @@ The starter kit's email verification, two-factor login and passkeys were left ou
 
 ## Credits are held at the maximum, and settled where status changes
 
-Submitting a generation holds its maximum charge from the user's balance, inside the same transaction that creates it, with the user's row locked. When the generation becomes final, `ApplyGenerationSnapshot` releases the hold and, on success, takes the actual charge, in the same locked transaction that records the status and cost. So several images running at once can never spend more than the user has, and money still changes in one place. A generation made before balances existed has no hold, and settles without touching credits.
+Submitting a generation holds its maximum charge from the user's balance, inside the same transaction that creates it, with the user's row locked. When the generation becomes final, `ApplyGenerationSnapshot` releases the hold and, on success, takes the actual charge, in the same locked transaction that records the status and cost. So several images running at once can never spend more than the user has, and money still changes in one place. A generation made before balances existed has no hold, and settles without touching credits. On the live app, those are the five generations of 2026-11-17, made during the deploy checks: they're charged on the generation, so they're in the report and match `GET /v1/usage`, but they have no credit entries.
 
 ## A balance column, an append-only ledger, and two database guards
 
@@ -112,7 +112,7 @@ Submitting a generation holds its maximum charge from the user's balance, inside
 
 ## The server decides whether you can afford it
 
-The quote endpoint says, for each quality, whether the balance covers the maximum, compared in whole nanodollars on the server. The form only disables Generate and says "Not enough credits"; `CreateGeneration` checks again under the lock, and that check is the rule. The balance is one of the price's inputs, so a purchase or a settled image re-asks the server without the user touching the form.
+The quote endpoint says, for each quality, whether the balance covers the maximum, compared in whole nanodollars on the server. The form only disables Generate and says "Not enough credits"; `CreateGeneration` checks again under the lock, and that check is the rule. The exact balance is one of the price's inputs, so a purchase or a settled image re-asks the server without the user touching the form, even when the change is too small to show.
 
 ## Balances round down, holds round up
 
@@ -128,7 +128,11 @@ The admin report groups our **succeeded** generations by the UTC day of Pixelfor
 
 ## Emails are masked on the report
 
-The demo admin login will be public in this README, so anyone could open the report. It shows each user's name and a masked email (`al•••@gmail.com`): enough to tell accounts apart, not enough to contact anyone.
+The demo admin login is public in the README, so anyone can open the report. It shows each user's name and a masked email (`al•••@gmail.com`): enough to tell accounts apart, not enough to contact anyone.
+
+## The demo account can't be changed
+
+With the demo login public, anyone could change its password or delete it and lock out every reviewer after them. So its name, email and password can't be changed and it can't be deleted; each attempt is refused with a message under the form. The account is named by its email in `config/demo.php`, not by a database flag, so the deploy needs no migration or command. Not chosen: hiding the settings pages for it, which would leave the routes themselves open.
 
 ## Pixelforge's usage is fetched live, not saved
 

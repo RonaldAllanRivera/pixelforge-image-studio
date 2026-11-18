@@ -30,4 +30,12 @@ class ProfileUpdateRequest extends FormRequest
     {
         return $this->profileRules($this->user()->id);
     }
+
+    /**
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [new KeepDemoAccountUnchanged($this->user(), 'email')];
+    }
 }

@@ -56,6 +56,14 @@ class User extends Authenticatable
     }
 
     /**
+     * The shared demo account, whose login is public in the README (config/demo.php).
+     */
+    public function isDemoAccount(): bool
+    {
+        return $this->email === config('demo.account_email');
+    }
+
+    /**
      * @return HasMany<Generation, $this>
      */
     public function generations(): HasMany

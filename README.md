@@ -1,15 +1,34 @@
 # Pixelforge Image Studio
 
-<!-- Remove the status line below once Phase 10 is done. -->
-
-> **Status: work in progress.** This README describes the design. Sections marked _(pending)_ are filled in as each part ships.
+[![tests](https://github.com/RonaldAllanRivera/pixelforge-image-studio/actions/workflows/tests.yml/badge.svg)](https://github.com/RonaldAllanRivera/pixelforge-image-studio/actions/workflows/tests.yml)
 
 A Laravel, Vue and Inertia app where signed-in users generate images through the Pixelforge API and pay exactly what each generation cost, plus a 25% markup. Built for the PromptEdit Senior Product Engineer take-home assessment.
+
+## Highlights
+
+- **Charged exactly once.** The create response, webhooks and polls all go through one locked action, so a duplicate, late or out-of-order report can never charge twice. Failed generations are free.
+- **Exact to the nanodollar.** Money is whole nanodollars in `bigint` columns, with one rounding in the whole app. The admin report matches Pixelforge's own `GET /v1/usage` on 30 of 30 days.
+- **Ready for a flaky provider.** Rate limits, concurrency limits, overloads, timeouts and lost webhooks each have a planned response, and the user is told what happened in plain words.
+- **Both stretch goals:** credit balances with holds and an append-only ledger, and the admin report.
+- **Tested on the production database engine:** 373 Pest tests on Postgres, browser tests at desktop and phone width, and CI on every push.
 
 ## Live app
 
 - URL: https://pixelforge.allanai.dev
-- Logins: anyone can sign up as a normal user. A demo admin account for the usage report is listed here once deployed. The admin role can only read reports.
+- **Demo admin:** `demo@allanai.dev` / `Demo-sqXIb3Um3m-Px4`. It's a normal account that can also read the admin report, and it holds the smoke-test generations below. The password is used nowhere else. Its name, email and password can't be changed and it can't be deleted, so the next visitor can still sign in (`config/demo.php`).
+- Or sign up for your own account. It starts at $0; "Buy credits" adds pretend credits.
+
+### What's on the live site
+
+The demo admin's history has one generation for each path, made on 2026-11-18 (UTC) by the finished app:
+
+- `[succeed]` at every size and quality, one with two reference images;
+- `[fail]` (failed after Pixelforge accepted it), `[blocked]` (content policy) and `[overloaded]` (retried 5 times, then given up), each marked "not charged";
+- `[duplicate]` (every webhook delivered twice, charged once) and `[slow]` (about a minute of "Generating");
+- five submitted at once, two of them waiting for a free slot first;
+- a prompt with emoji, counted the way Pixelforge counts it.
+
+Its Credits page shows the purchase and every hold, release and charge, and the balance equals their sum to the nanodollar. The admin report checks every day against `GET /v1/usage` for the deployed app's key, named `production` in the Pixelforge dashboard. The `local` key is for development, so its usage won't match.
 
 ## What it does
 
@@ -20,9 +39,34 @@ A Laravel, Vue and Inertia app where signed-in users generate images through the
 - **Credit balances:** every account starts at $0. "Buy credits" adds $5, $10 or $25 (a pretend purchase, no payment). Generate is blocked, with a clear message, when the balance can't cover the most an image can cost. The balance shows on every page, and the Credits page lists every purchase, hold, release and charge.
 - **Admin report** (admins only): what users were charged, what Pixelforge charged us and the profit, per UTC day and per user. Each day is checked against Pixelforge's own `GET /v1/usage` to the nanodollar, and any difference is listed.
 
+## Front end
+
+- **The browser never does money math.** Every amount arrives already formatted by the server's API resources, so the screen always shows what the database holds.
+- **The price always matches the form.** The quote is asked for again 300 ms after typing stops. Until the answer matches the form, the old price dims with "Updating…" and Generate waits.
+- **Live status without waste.** The Studio reloads only the history and the balance (Inertia partial reloads) every 2 seconds, and only while something is running. Each poll waits for the previous answer, and a hidden tab pauses.
+- **Checked in a real browser.** Pest's browser tests drive Chromium through the Studio, buying credits, the Credits page and the admin report, at desktop and phone width.
+
 ## Stack
 
-Laravel, Vue 3, Inertia, TypeScript, Tailwind, PostgreSQL and Pest. Deployed on Laravel Cloud.
+- **Back end:** Laravel 13, PostgreSQL, and `brick/math` for exact decimals.
+- **Front end:** Vue 3 with TypeScript, Inertia 3 and Tailwind.
+- **Hosting:** Laravel Cloud, with its managed queue (Amazon SQS), so queued jobs run even while the app has scaled to zero, and an hourly scheduled catch-up.
+- **Quality:** Pest (unit, feature and browser tests), PHPStan level 7, Pint, TypeScript checks and formatting. GitHub Actions runs all of them, on Postgres, on every push.
+
+## Where to look in the code
+
+| What                                                   | Where                                                                                                                                        |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Money: nanodollars, the markup and the one rounding    | [Nanodollars](app/Support/Nanodollars.php)                                                                                                   |
+| The estimate and the maximum before a generation runs  | [PricingCalculator](app/Pricing/PricingCalculator.php)                                                                                       |
+| The one place where status and money change            | [ApplyGenerationSnapshot](app/Actions/ApplyGenerationSnapshot.php)                                                                           |
+| Creating a generation and holding its maximum          | [CreateGeneration](app/Actions/CreateGeneration.php), [CreditLedger](app/Credits/CreditLedger.php)                                           |
+| Talking to Pixelforge, with typed errors               | [PixelforgeClient](app/Pixelforge/PixelforgeClient.php), [Exceptions](app/Pixelforge/Exceptions)                                             |
+| Submitting: wait, retry or fail                        | [SubmitGeneration](app/Jobs/SubmitGeneration.php)                                                                                            |
+| Polling and the hourly catch-up                        | [PollGeneration](app/Jobs/PollGeneration.php), [ReconcileGenerations](app/Console/Commands/ReconcileGenerations.php)                         |
+| Webhooks                                               | [PixelforgeWebhookController](app/Http/Controllers/PixelforgeWebhookController.php), [WebhookSignature](app/Pixelforge/WebhookSignature.php) |
+| The admin report and its check against `GET /v1/usage` | [SpendReport](app/Reports/SpendReport.php), [UsageComparison](app/Reports/UsageComparison.php)                                               |
+| The Studio                                             | [Studio.vue](resources/js/pages/Studio.vue), [GenerateForm.vue](resources/js/components/studio/GenerateForm.vue)                             |
 
 ## How money works
 
@@ -46,7 +90,12 @@ Characters are counted as Unicode code points on the server (`mb_strlen`), the w
 
 **Failed generations cost nothing**, including those rejected before Pixelforge accepted them.
 
-**Credits.** Each user has a balance, stored in nanodollars, and every change to it is an entry in a ledger: a purchase, a hold, a release or a charge. Submitting a generation **holds its maximum** from the balance, with the user's row locked, so several images at once can never spend more than you have; a balance that can't cover the maximum creates nothing. When the generation ends, the same locked transaction that records its cost **releases the hold** and, if it succeeded, **takes the actual charge**. A failure only releases it. The database itself refuses a negative balance and a second charge for one generation, and a balance always equals the sum of its entries. Balances are shown rounded down, so the page never shows more than you have, and a hold is shown rounded up, exactly as its "never more than" was quoted.
+**Credits.** Each user has a balance, stored in nanodollars, and every change to it is an entry in a ledger: a purchase, a hold, a release or a charge.
+
+- Submitting a generation **holds its maximum** from the balance, with the user's row locked, so several images at once can never spend more than you have. A balance that can't cover the maximum creates nothing.
+- When the generation ends, the same locked transaction that records its cost **releases the hold** and, if it succeeded, **takes the actual charge**. A failure only releases it.
+- The database itself refuses a negative balance and a second charge for one generation, and a balance always equals the sum of its entries.
+- Balances are shown rounded down, so the page never shows more than you have. A hold is shown rounded up, exactly as its "never more than" was quoted.
 
 ## How failures are handled
 
@@ -125,5 +174,5 @@ The choices the brief left open, and why, are in [docs/DECISIONS.md](docs/DECISI
 - **A poll answered "not found" or "invalid key" only logs an error.** The generation stays queued and the hourly reconcile tries again. Next step: flag it for an operator.
 - **Waiting for a free slot uses up the shared rate limit.** Each wait counts against our 50-requests-per-minute budget, even though it doesn't call Pixelforge.
 - **A generation that never finishes keeps its hold.** For example one left pending after a `409` for a person to check. The Credits page shows it as held.
-- **The admin report is effectively public** once the demo admin login is in this README. Emails are masked; names and amounts are not.
+- **The admin report is effectively public,** because the demo admin login is in this README. Emails are masked; names and amounts are not.
 - **`completed_at` is a plain timestamp.** It's correct because the app runs in UTC; `timestamptz` would be safer if that ever changed.

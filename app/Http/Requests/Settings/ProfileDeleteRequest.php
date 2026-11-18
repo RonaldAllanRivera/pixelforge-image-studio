@@ -21,4 +21,12 @@ class ProfileDeleteRequest extends FormRequest
             'password' => $this->currentPasswordRules(),
         ];
     }
+
+    /**
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [new KeepDemoAccountUnchanged($this->user(), 'password')];
+    }
 }

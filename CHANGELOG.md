@@ -2,24 +2,28 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Phase 10: Release (2026-11-17)
+## Phase 10: Release (2026-11-18)
 
-### Fixed
+### Added
 
-- After a "Not enough credits" refusal, buying credits clears the message, so it no longer sits under an enabled Generate button.
-- The Studio asks for the price again whenever the exact balance changes, not only when its 4-decimal display does. A balance one nanodollar short of the maximum, then topped up by one nanodollar, used to keep Generate off.
+- The demo account, whose login is public in the README, can't have its name, email or password changed and can't be deleted, so one visitor can't lock out the next. Each attempt is refused with a message under the form (`config/demo.php`, `KeepDemoAccountUnchanged`).
+- Tests that a balance exactly equal to the maximum is enough, and that nothing is held once an image has settled.
 
 ### Changed
 
 - The Credits page colours purchases and releases green by their entry type, instead of reading the "+" in the displayed amount.
+- README: the demo admin login, what's on the live site and which Pixelforge key to compare with; the "work in progress" status line is gone.
+- README: highlights and a CI badge at the top, a front-end section, the full stack, and a table of where to look in the code.
+- DECISIONS: the live app's 2026-11-17 generations predate balances, so they're in the report but have no credit entries; polling recorded two generations correctly while the webhook tunnel was down; why the demo account is locked.
 
 ### Removed
 
 - The quote's unused `balance` field (the balance on screen comes from the shared page props), and the report rows' unused `profitNano()` and `userId`.
 
-### Added
+### Fixed
 
-- Tests that a balance exactly equal to the maximum is enough, and that nothing is held once an image has settled.
+- After a "Not enough credits" refusal, buying credits clears the message, so it no longer sits under an enabled Generate button.
+- The Studio asks for the price again whenever the exact balance changes, not only when its 4-decimal display does. A balance one nanodollar short of the maximum, then topped up by one nanodollar, used to keep Generate off.
 
 ## Phase 9: Credit balances and the admin report (2026-11-17)
 
@@ -45,6 +49,16 @@ Both stretch goals. Every account starts at $0.
 
 - The Studio's 2-second status poll also reloads the balance.
 - Local seeded users start with $10 of credit.
+
+## Phase 8: Live check of the Studio (2026-11-17)
+
+Phase 7 deployed and checked on the live app with the production key. No code changed.
+
+- `[succeed]`, `[fail]` and `[duplicate] [succeed]` generations on the live app: each success was charged once and stayed under its quoted maximum, and each failure was free. Pixelforge's delivery log shows every production webhook answered `204`, the duplicate deliveries included.
+
+### Changed
+
+- The live app moved to its own domain, https://pixelforge.allanai.dev, and the production webhook now points there.
 
 ## Phase 7: The Studio UI (2026-11-17)
 
