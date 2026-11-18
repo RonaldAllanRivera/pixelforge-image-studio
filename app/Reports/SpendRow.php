@@ -14,9 +14,4 @@ final readonly class SpendRow
         public UsageFigures $usage,
         public int $chargedNano,
     ) {}
-
-    public function profitNano(): int
-    {
-        return $this->chargedNano - $this->usage->costNano;
-    }
 }

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { index } from '@/routes/credits';
 import { show } from '@/routes/generations';
-import type { CreditEntry, Paginated } from '@/types';
+import type { CreditEntry, CreditType, Paginated } from '@/types';
 
 defineProps<{
     entries: Paginated<CreditEntry>;
@@ -21,6 +21,9 @@ defineOptions({
 
 const page = usePage();
 const credits = computed(() => page.props.credits);
+
+// The entries that add to the balance, shown in green.
+const incoming: CreditType[] = ['purchase', 'release'];
 
 function local(iso: string | null): string {
     return iso === null
@@ -100,11 +103,12 @@ function local(iso: string | null): string {
                         </p>
                     </div>
                     <span
+                        :data-test="`amount-${entry.type}`"
                         :title="entry.amount_exact"
                         :class="
                             cn(
                                 'shrink-0 font-medium tabular-nums',
-                                entry.amount.startsWith('+') &&
+                                incoming.includes(entry.type) &&
                                     'text-emerald-700 dark:text-emerald-400',
                             )
                         "

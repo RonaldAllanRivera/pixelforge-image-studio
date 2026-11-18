@@ -76,14 +76,15 @@ const credits = computed(() => page.props.credits);
 // The inputs that change the price. The price on screen is current only when it was
 // worked out for exactly these; otherwise it's dimmed and Generate waits for the new one.
 // The balance is one of them: the server says whether it covers each maximum, so a
-// purchase or a settled image re-asks without the user touching the form.
+// purchase or a settled image re-asks without the user touching the form. It's the exact
+// balance, so even a change too small to show re-asks.
 const priceInputs = computed(() =>
     JSON.stringify([
         form.prompt,
         form.size,
         form.quality,
         filledReferences.value.length,
-        credits.value?.balance,
+        credits.value?.balance_exact,
     ]),
 );
 const pricedFor = ref<string | null>(null);
@@ -103,6 +104,18 @@ const cannotAfford = computed(
 );
 const creditsError = computed(
     () => (form.errors as Record<string, string | undefined>).credits,
+);
+
+// "Not enough credits" is out of date once the balance changes, after a purchase or a
+// settled image. The server only refuses for credits once every field has passed, so it's
+// the form's only error, and clearing them all clears just that one.
+watch(
+    () => credits.value?.balance_exact,
+    () => {
+        if (creditsError.value) {
+            form.clearErrors();
+        }
+    },
 );
 
 function refreshPrice(): void {

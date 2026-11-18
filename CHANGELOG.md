@@ -2,6 +2,25 @@
 
 All notable changes to this project, grouped by build phase, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Phase 10: Release (2026-11-17)
+
+### Fixed
+
+- After a "Not enough credits" refusal, buying credits clears the message, so it no longer sits under an enabled Generate button.
+- The Studio asks for the price again whenever the exact balance changes, not only when its 4-decimal display does. A balance one nanodollar short of the maximum, then topped up by one nanodollar, used to keep Generate off.
+
+### Changed
+
+- The Credits page colours purchases and releases green by their entry type, instead of reading the "+" in the displayed amount.
+
+### Removed
+
+- The quote's unused `balance` field (the balance on screen comes from the shared page props), and the report rows' unused `profitNano()` and `userId`.
+
+### Added
+
+- Tests that a balance exactly equal to the maximum is enough, and that nothing is held once an image has settled.
+
 ## Phase 9: Credit balances and the admin report (2026-11-17)
 
 Both stretch goals. Every account starts at $0.

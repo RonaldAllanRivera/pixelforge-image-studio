@@ -1,8 +1,11 @@
 <?php
 
 use App\Actions\ApplyGenerationSnapshot;
+use App\Credits\CreditLedger;
+use App\Enums\GenerationStatus;
 use App\Models\Generation;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\Fixtures\Pixelforge;
@@ -62,6 +65,67 @@ test('the balance drops by the actual charge when the image is done, and the Cre
         ->assertSee('Released')
         ->assertSee('Charged')
         ->assertSee('A red fox [succeed]')
+        ->assertNoJavascriptErrors();
+});
+
+test('buying credits clears a "Not enough credits" error from an earlier try', function () {
+    $user = User::factory()->withCredits(1)->create();
+    $this->actingAs($user);
+
+    $page = visit(route('studio'))
+        ->type('@prompt', 'A red fox')
+        ->waitForText('Estimated')
+        ->assertEnabled('@generate');
+
+    // Another tab spends the balance after this one showed the price.
+    User::query()->whereKey($user->id)->update(['balance_nano' => 0]);
+
+    $page->click('@generate')
+        ->waitForText('Not enough credits. This image can cost up to')
+        ->click('@buy-credits')
+        ->click('@buy-5')
+        ->waitForText('Added $5.00. This is a pretend purchase.')
+        ->wait(1.5) // the price is asked again for the new balance
+        ->assertEnabled('@generate')
+        ->assertMissing('@credits-error')
+        ->assertNoJavascriptErrors();
+});
+
+test('the price is asked again when the balance changes by less than the 4 decimals shown', function () {
+    $user = User::factory()->create();
+    (new CreditLedger)->purchase($user, 86_274_999); // one nanodollar short of medium's maximum
+    Generation::factory()->for($user)->create(); // still running, so the page keeps reloading the balance
+    $this->actingAs($user);
+
+    $page = visit(route('studio'))
+        ->type('@prompt', 'A red fox')
+        ->waitForText('Not enough credits')
+        ->assertDisabled('@generate')
+        ->assertSeeIn('@balance', '$0.0862');
+
+    User::query()->whereKey($user->id)->increment('balance_nano', 1); // exactly the maximum, still shown as $0.0862
+
+    $page->wait(3.5) // one 2-second reload, then the price
+        ->assertSeeIn('@balance', '$0.0862')
+        ->assertEnabled('@generate')
+        ->assertNoJavascriptErrors();
+});
+
+test('money coming in is green on the Credits page, money going out is not', function () {
+    $user = User::factory()->withCredits(1)->create();
+    $generation = Generation::factory()->for($user)->create();
+    DB::transaction(fn () => (new CreditLedger)->hold(User::query()->lockForUpdate()->findOrFail($user->id), $generation));
+    $generation->forceFill(['status' => GenerationStatus::Failed, 'charge_nano' => 0])->save();
+    DB::transaction(fn () => (new CreditLedger)->settle($generation));
+
+    $this->actingAs($user);
+
+    $green = fn (string $type) => "[...document.querySelectorAll('[data-test=amount-{$type}]')].map(e => e.classList.contains('text-emerald-700')).join()";
+
+    visit(route('credits.index'))
+        ->assertScript($green('purchase'), 'true')
+        ->assertScript($green('release'), 'true')
+        ->assertScript($green('hold'), 'false')
         ->assertNoJavascriptErrors();
 });
 

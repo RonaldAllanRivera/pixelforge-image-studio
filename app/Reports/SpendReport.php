@@ -79,7 +79,6 @@ final readonly class SpendReport
             ->all();
 
         return array_values(array_map(fn (object $row) => new UserSpendRow(
-            userId: $row->user_id === null ? null : (int) $row->user_id,
             name: $row->user_id === null ? 'Deleted account' : (string) $row->name,
             maskedEmail: $row->user_id === null ? null : MaskedEmail::mask((string) $row->email),
             generations: (int) $row->generations,

@@ -35,7 +35,6 @@ final class QuoteController extends Controller
 
         return response()->json([
             'characters' => mb_strlen($prompt),
-            'balance' => Nanodollars::formatRoundedDown($balance),
             'qualities' => array_map(fn (Quote $quote) => [
                 'estimated' => Nanodollars::format($quote->estimatedCharge),
                 'maximum' => Nanodollars::formatAtMost($quote->maximumCharge),

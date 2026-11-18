@@ -62,8 +62,6 @@ export type StudioLimits = {
 
 export type Quote = {
     characters: number;
-    // The user's balance, rounded down.
-    balance: string;
     // affordable: the balance covers the maximum. Decided on the server.
     qualities: Record<
         string,

@@ -95,6 +95,19 @@ test('settling a failure only releases the hold', function () {
         ->and($user->fresh()->balance_nano)->toBe(1_000_000_000);
 });
 
+test('nothing is held once the image has settled', function () {
+    $user = User::factory()->withCredits(1)->create();
+    $generation = Generation::factory()->for($user)->create();
+    holdFor($user, $generation);
+
+    expect($this->ledger->held($user))->toBe(['amount_nano' => 86_275_000, 'images' => 1]);
+
+    $generation->forceFill(['status' => GenerationStatus::Succeeded, 'charge_nano' => 21_562_500])->save();
+    DB::transaction(fn () => $this->ledger->settle($generation));
+
+    expect($this->ledger->held($user))->toBe(['amount_nano' => 0, 'images' => 0]);
+});
+
 test('settling a generation without a hold writes nothing', function () {
     $user = User::factory()->withCredits(1)->create();
     $generation = Generation::factory()->for($user)->create();

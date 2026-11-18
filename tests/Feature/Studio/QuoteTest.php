@@ -83,10 +83,26 @@ test('marks each quality affordable or not, compared on the server', function ()
         'reference_images' => [],
     ])
         ->assertOk()
-        ->assertJsonPath('balance', '$0.0500')
+        // The balance on screen comes from the shared page props, so the quote doesn't repeat it.
+        ->assertJsonMissingPath('balance')
         ->assertJsonPath('qualities.low.affordable', true)     // at most 21,837,500
         ->assertJsonPath('qualities.medium.affordable', false) // at most 86,275,000
         ->assertJsonPath('qualities.high.affordable', false);  // at most 340,025,000
+});
+
+test('a balance exactly equal to the maximum is enough', function () {
+    $user = User::factory()->create();
+    (new CreditLedger)->purchase($user, 86_275_000); // medium's maximum for this prompt, to the nanodollar
+
+    $this->actingAs($user)->postJson(route('studio.quote'), [
+        'prompt' => 'A red fox',
+        'size' => '1024x1024',
+        'quality' => 'medium',
+        'reference_images' => [],
+    ])
+        ->assertOk()
+        ->assertJsonPath('qualities.medium.affordable', true)
+        ->assertJsonPath('qualities.high.affordable', false);
 });
 
 test('is for signed-in users only', function () {
